@@ -2490,3 +2490,7 @@ ul.doc-list {
     align-items: stretch;
   }
 }
+
+.backup-recovery-link {
+  text-decoration: none;
+}

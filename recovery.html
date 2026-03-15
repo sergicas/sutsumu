@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sutsumu Recovery</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: linear-gradient(180deg, #eff6ff, #f8fafc); color: #0f172a; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 40px 20px 56px; }
+    .card { background: #fff; border: 1px solid #dbeafe; border-radius: 20px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08); padding: 24px; margin-bottom: 18px; }
+    h1 { margin: 0 0 10px; font-size: 32px; }
+    h2 { margin-top: 0; }
+    p { line-height: 1.6; }
+    .muted { color: #64748b; }
+    .badge { display: inline-flex; padding: 6px 10px; border-radius: 999px; background: #e0f2fe; color: #0369a1; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+    button, a.btn { appearance: none; border: 0; border-radius: 12px; padding: 12px 16px; background: #0ea5e9; color: white; font-weight: 700; cursor: pointer; text-decoration: none; }
+    button.secondary, a.secondary { background: #e2e8f0; color: #0f172a; }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
+    .stat { padding: 14px; border-radius: 14px; background: #f8fafc; border: 1px solid #e2e8f0; }
+    .stat strong { display: block; font-size: 22px; margin-top: 4px; }
+    .warn { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+    code { background: #eff6ff; padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <span class="badge">Recuperació</span>
+      <h1>Recuperació de Sutsumu</h1>
+      <p>Aquesta pantalla llegeix la <strong>còpia local de supervivència</strong> guardada al navegador. Serveix per recuperar carpetes i documents recents si l'app principal queda buida o falla en arrencar.</p>
+      <p class="muted">Obre aquesta pàgina des del mateix navegador i perfil on havies fet servir Sutsumu.</p>
+      <div class="actions">
+        <a class="btn secondary" href="index.html">Tornar a Sutsumu</a>
+      </div>
+    </div>
+
+    <div class="card" id="survivalCard">
+      <h2>Supervivència local</h2>
+      <p id="survivalSummary" class="muted">Comprovant si hi ha dades recuperables...</p>
+      <div id="survivalStats" class="stats"></div>
+      <div class="actions">
+        <button id="downloadSurvivalBtn" disabled>Descarregar còpia de supervivència</button>
+      </div>
+    </div>
+
+    <div class="card" id="vaultCard">
+      <h2>Volta crítica</h2>
+      <p id="vaultSummary" class="muted">Comprovant si hi ha una còpia crítica completa...</p>
+      <div id="vaultStats" class="stats"></div>
+      <div class="actions">
+        <button id="downloadVaultBtn" disabled>Descarregar còpia crítica</button>
+      </div>
+    </div>
+
+    <div class="card warn">
+      <h2>Com recuperar-ho</h2>
+      <p>1. Descarrega la còpia que trobis aquí.</p>
+      <p>2. Torna a obrir Sutsumu quan funcioni.</p>
+      <p>3. Fes servir <code>Importar JSON</code> i selecciona l'arxiu descarregat.</p>
+    </div>
+  </div>
+  <script>
+    const SURVIVAL_LIGHT_BACKUP_HISTORY_KEY = 'sutsumu_survival_light_backup_history_v1';
+    const SURVIVAL_RECOVERY_VAULT_KEY = 'sutsumu_survival_recovery_vault_v1';
+    const survivalSummary = document.getElementById('survivalSummary');
+    const survivalStats = document.getElementById('survivalStats');
+    const vaultSummary = document.getElementById('vaultSummary');
+    const vaultStats = document.getElementById('vaultStats');
+    const downloadSurvivalBtn = document.getElementById('downloadSurvivalBtn');
+    const downloadVaultBtn = document.getElementById('downloadVaultBtn');
+
+    function safeParse(value, fallback) { try { return JSON.parse(value); } catch (_err) { return fallback; } }
+    function countStats(payload) {
+      const docs = Array.isArray(payload?.docs) ? payload.docs : [];
+      return {
+        folders: docs.filter(item => item && item.type === 'folder' && !item.isDeleted).length,
+        documents: docs.filter(item => item && item.type === 'document' && !item.isDeleted).length,
+        deleted: docs.filter(item => item && item.isDeleted).length,
+        versions: docs.reduce((total, item) => total + (Array.isArray(item?.versions) ? item.versions.length : 0), 0)
+      };
+    }
+    function renderStatGrid(element, stats) {
+      element.innerHTML = '';
+      Object.entries(stats).forEach(([label, value]) => {
+        const card = document.createElement('div');
+        card.className = 'stat';
+        card.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+        element.appendChild(card);
+      });
+    }
+    function downloadJson(filename, payload) {
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    const survivalHistory = safeParse(localStorage.getItem(SURVIVAL_LIGHT_BACKUP_HISTORY_KEY), []);
+    const latestSurvival = Array.isArray(survivalHistory) && survivalHistory.length
+      ? survivalHistory.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
+      : null;
+
+    if (latestSurvival && Array.isArray(latestSurvival.docs) && latestSurvival.docs.length) {
+      const stats = countStats(latestSurvival);
+      survivalSummary.textContent = `Còpia trobada del ${new Date(latestSurvival.createdAt).toLocaleString('ca-ES')} amb ${stats.documents} documents i ${stats.folders} carpetes.`;
+      renderStatGrid(survivalStats, stats);
+      downloadSurvivalBtn.disabled = false;
+      downloadSurvivalBtn.addEventListener('click', () => {
+        downloadJson(`sutsumu_survival_recovery_${String(latestSurvival.createdAt || new Date().toISOString()).replace(/[:.]/g, '-')}.json`, {
+          schema: 'bento-backup',
+          version: 2,
+          exportedAt: new Date().toISOString(),
+          reason: 'survival-recovery-export',
+          app: 'Sutsumu',
+          appVersion: '1.0.0',
+          appRelease: 'estable',
+          docs: Array.isArray(latestSurvival.docs) ? latestSurvival.docs : [],
+          expandedFolders: Array.isArray(latestSurvival.expandedFolders) ? latestSurvival.expandedFolders : [],
+          source: 'survival-local-mirror'
+        });
+      });
+    } else {
+      survivalSummary.textContent = 'No he trobat cap còpia local de supervivència en aquest navegador.';
+    }
+
+    const vaultSnapshot = safeParse(localStorage.getItem(SURVIVAL_RECOVERY_VAULT_KEY), null);
+    if (vaultSnapshot && vaultSnapshot.payload && Array.isArray(vaultSnapshot.payload.docs) && vaultSnapshot.payload.docs.length) {
+      const stats = countStats(vaultSnapshot.payload);
+      vaultSummary.textContent = `Còpia crítica trobada del ${new Date(vaultSnapshot.createdAt).toLocaleString('ca-ES')}.`;
+      renderStatGrid(vaultStats, stats);
+      downloadVaultBtn.disabled = false;
+      downloadVaultBtn.addEventListener('click', () => {
+        downloadJson(`sutsumu_recovery_vault_${String(vaultSnapshot.createdAt || new Date().toISOString()).replace(/[:.]/g, '-')}.json`, vaultSnapshot.payload);
+      });
+    } else {
+      vaultSummary.textContent = 'No he trobat cap volta crítica completa en aquest navegador.';
+    }
+  </script>
+</body>
+</html>

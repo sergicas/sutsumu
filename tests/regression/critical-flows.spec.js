@@ -196,3 +196,38 @@ test('moves a document to trash and restores it', async ({ page }) => {
   await page.locator('#exitTrashBtn').click();
   await expect(page.locator('#list li').filter({ hasText: title }).first()).toBeVisible();
 });
+
+
+test('recovers documents from the survival mirror if IndexedDB is lost', async ({ page }) => {
+  const title = 'Regressio Supervivencia';
+  await createDocument(page, {
+    title,
+    content: 'Document protegit pel mirall local',
+    tags: 'survival'
+  });
+
+  const hasMirror = await page.evaluate(() => Boolean(localStorage.getItem('sutsumu_survival_light_backup_history_v1')));
+  expect(hasMirror).toBeTruthy();
+
+  await page.evaluate(async () => {
+    const deleteDb = (name) => new Promise(resolve => {
+      const request = indexedDB.deleteDatabase(name);
+      request.onsuccess = () => resolve(true);
+      request.onerror = () => resolve(true);
+      request.onblocked = () => resolve(true);
+    });
+    await deleteDb('BentoApp');
+    localStorage.removeItem('bento_simple_docs');
+    localStorage.removeItem('bento_expanded_folders');
+  });
+
+  await page.reload();
+  await expect(page.locator('#confirmTitle')).toContainText('Recuperar la còpia local de supervivència?');
+  await page.locator('#confirmOkBtn').click();
+  await expectToast(page, 'Còpia local recuperada correctament.');
+  await expect(page.locator('#list li').filter({ hasText: title }).first()).toBeVisible();
+
+  await page.goto('/recovery.html');
+  await expect(page.locator('#survivalSummary')).toContainText('Còpia trobada');
+  await expect(page.locator('#downloadSurvivalBtn')).toBeEnabled();
+});

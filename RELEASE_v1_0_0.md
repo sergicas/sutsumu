@@ -29,3 +29,9 @@ Executa:
 cd "/Users/sergicastillo/Downloads/Sutsumu Backups/sutsumu_v1_0_final_app"
 npm run test:regression
 ```
+
+## Protecció extra de dades
+
+- mirall local de supervivència guardat també a localStorage
+- pàgina independent de recuperació a `recovery.html`
+- recuperació automàtica si l'app arrenca buida després d'una fallada d'IndexedDB

@@ -192,6 +192,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const EDIT_AUTOSAVE_DELAY = 800;
   const VERSION_LIMIT = 25;
   const LIGHT_BACKUP_HISTORY_KEY = 'bento_light_backup_history_v2';
+  const SURVIVAL_LIGHT_BACKUP_HISTORY_KEY = 'sutsumu_survival_light_backup_history_v1';
   const LIGHT_BACKUP_LIMIT = 4;
   const FULL_BACKUP_SCHEMA = 'bento-backup';
   const FULL_BACKUP_VERSION = 2;
@@ -200,6 +201,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const AUTO_FULL_BACKUP_DEBOUNCE_MS = 2500;
   const AUTO_BACKUP_STALE_HOURS = 24;
   const RECOVERY_VAULT_KEY = 'bento_recovery_vault_v1';
+  const SURVIVAL_RECOVERY_VAULT_KEY = 'sutsumu_survival_recovery_vault_v1';
   const RECOVERY_VAULT_MAX_AGE_DAYS = 14;
   const DISMISSED_RECOVERY_VAULT_SESSION_KEY = 'bento_recovery_vault_dismissed';
   const DISMISSED_LIGHT_RECOVERY_SESSION_KEY = 'bento_light_recovery_dismissed';
@@ -3612,8 +3614,17 @@ async function applyPendingAppUpdate() {
   }
 
 
+  function getLightBackupSnapshotSignature(entry) {
+    if (!entry || typeof entry !== 'object') return '';
+    return JSON.stringify({
+      docs: Array.isArray(entry.docs) ? makeDocsSafeForLocalStorage(normalizeDocs(entry.docs)) : [],
+      expandedFolders: Array.isArray(entry.expandedFolders) ? entry.expandedFolders : []
+    });
+  }
+
   function normalizeLightBackupHistory(rawHistory) {
     if (!Array.isArray(rawHistory)) return [];
+    const seen = new Set();
     return rawHistory
       .filter(entry => entry && typeof entry === 'object')
       .map(entry => ({
@@ -3624,39 +3635,66 @@ async function applyPendingAppUpdate() {
         expandedFolders: Array.isArray(entry.expandedFolders) ? entry.expandedFolders : []
       }))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .filter(entry => {
+        const signature = getLightBackupSnapshotSignature(entry);
+        if (!signature || seen.has(signature)) return false;
+        seen.add(signature);
+        return true;
+      })
       .slice(0, LIGHT_BACKUP_LIMIT);
   }
 
+  function readSurvivalLightBackupHistory() {
+    return normalizeLightBackupHistory(safeJSONParse(localStorage.getItem(SURVIVAL_LIGHT_BACKUP_HISTORY_KEY), []));
+  }
+
+  function writeSurvivalLightBackupHistory(history) {
+    try {
+      localStorage.setItem(SURVIVAL_LIGHT_BACKUP_HISTORY_KEY, JSON.stringify(normalizeLightBackupHistory(history)));
+    } catch (err) {
+      console.warn("No s'ha pogut actualitzar la còpia local de supervivència.", err);
+    }
+  }
+
   async function readLightBackupHistory() {
+    const sources = [];
     if (getBackupStore()) {
       try {
-        return normalizeLightBackupHistory(await getBackupStore().getItem(LIGHT_BACKUP_HISTORY_KEY));
+        sources.push(await getBackupStore().getItem(LIGHT_BACKUP_HISTORY_KEY));
       } catch (err) {
         console.warn("No s'ha pogut llegir l'historial de còpies des d'IndexedDB.", err);
       }
     }
-    return normalizeLightBackupHistory(safeJSONParse(localStorage.getItem(LIGHT_BACKUP_HISTORY_KEY), []));
+    sources.push(safeJSONParse(localStorage.getItem(LIGHT_BACKUP_HISTORY_KEY), []));
+    sources.push(readSurvivalLightBackupHistory());
+    return normalizeLightBackupHistory(sources.flat());
   }
 
   async function writeLightBackupHistory(history) {
     const normalizedHistory = normalizeLightBackupHistory(history);
+    let storedInPrimary = false;
+
     if (getBackupStore()) {
       try {
         await getBackupStore().setItem(LIGHT_BACKUP_HISTORY_KEY, normalizedHistory);
+        storedInPrimary = true;
         if (localStorage.getItem(LIGHT_BACKUP_HISTORY_KEY)) {
           localStorage.removeItem(LIGHT_BACKUP_HISTORY_KEY);
         }
-        return;
       } catch (err) {
         console.warn("No s'ha pogut actualitzar l'historial a IndexedDB. Intentarem fer una còpia mínima local.", err);
       }
     }
 
-    try {
-      localStorage.setItem(LIGHT_BACKUP_HISTORY_KEY, JSON.stringify(normalizedHistory));
-    } catch (err) {
-      console.warn("No s'ha pogut actualitzar l'historial local de còpies de seguretat.", err);
+    if (!storedInPrimary) {
+      try {
+        localStorage.setItem(LIGHT_BACKUP_HISTORY_KEY, JSON.stringify(normalizedHistory));
+      } catch (err) {
+        console.warn("No s'ha pogut actualitzar l'historial local de còpies de seguretat.", err);
+      }
     }
+
+    writeSurvivalLightBackupHistory(normalizedHistory);
   }
 
   function createLightBackupSnapshot(reason = 'auto-save') {
@@ -3707,30 +3745,67 @@ async function applyPendingAppUpdate() {
     };
   }
 
+  function readSurvivalRecoveryVaultSnapshot() {
+    return normalizeRecoveryVaultSnapshot(safeJSONParse(localStorage.getItem(SURVIVAL_RECOVERY_VAULT_KEY), null));
+  }
+
+  function writeSurvivalRecoveryVaultSnapshot(snapshot) {
+    const normalizedSnapshot = normalizeRecoveryVaultSnapshot(snapshot);
+    if (!normalizedSnapshot) return null;
+    try {
+      localStorage.setItem(SURVIVAL_RECOVERY_VAULT_KEY, JSON.stringify(normalizedSnapshot));
+    } catch (err) {
+      console.warn("No s'ha pogut actualitzar la volta local de supervivència.", err);
+    }
+    return normalizedSnapshot;
+  }
+
+  function pickNewestRecoveryVaultSnapshot(...snapshots) {
+    return snapshots
+      .filter(Boolean)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
+  }
+
   async function readRecoveryVaultSnapshot() {
+    let indexedDbSnapshot = null;
     if (getBackupStore()) {
       try {
-        return normalizeRecoveryVaultSnapshot(await getBackupStore().getItem(RECOVERY_VAULT_KEY));
+        indexedDbSnapshot = normalizeRecoveryVaultSnapshot(await getBackupStore().getItem(RECOVERY_VAULT_KEY));
       } catch (err) {
         console.warn("No s'ha pogut llegir la còpia de recuperació d'IndexedDB.", err);
       }
     }
-    return normalizeRecoveryVaultSnapshot(safeJSONParse(localStorage.getItem(RECOVERY_VAULT_KEY), null));
+    const legacyLocalSnapshot = normalizeRecoveryVaultSnapshot(safeJSONParse(localStorage.getItem(RECOVERY_VAULT_KEY), null));
+    const survivalSnapshot = readSurvivalRecoveryVaultSnapshot();
+    return pickNewestRecoveryVaultSnapshot(indexedDbSnapshot, legacyLocalSnapshot, survivalSnapshot);
   }
 
   async function writeRecoveryVaultSnapshot(snapshot) {
     const normalizedSnapshot = normalizeRecoveryVaultSnapshot(snapshot);
     if (!normalizedSnapshot) return null;
 
+    let storedInPrimary = false;
     if (getBackupStore()) {
-      await getBackupStore().setItem(RECOVERY_VAULT_KEY, normalizedSnapshot);
-      if (localStorage.getItem(RECOVERY_VAULT_KEY)) {
-        localStorage.removeItem(RECOVERY_VAULT_KEY);
+      try {
+        await getBackupStore().setItem(RECOVERY_VAULT_KEY, normalizedSnapshot);
+        storedInPrimary = true;
+        if (localStorage.getItem(RECOVERY_VAULT_KEY)) {
+          localStorage.removeItem(RECOVERY_VAULT_KEY);
+        }
+      } catch (err) {
+        console.warn("No s'ha pogut desar la còpia de recuperació a IndexedDB.", err);
       }
-      return normalizedSnapshot;
     }
 
-    localStorage.setItem(RECOVERY_VAULT_KEY, JSON.stringify(normalizedSnapshot));
+    if (!storedInPrimary) {
+      try {
+        localStorage.setItem(RECOVERY_VAULT_KEY, JSON.stringify(normalizedSnapshot));
+      } catch (err) {
+        console.warn("No s'ha pogut desar la còpia local de recuperació.", err);
+      }
+    }
+
+    writeSurvivalRecoveryVaultSnapshot(normalizedSnapshot);
     return normalizedSnapshot;
   }
 
@@ -3977,7 +4052,7 @@ async function applyPendingAppUpdate() {
 
     if (!supportsCompressedFullBackups()) {
       backupCountBadgeEl.textContent = '—';
-      backupStatusTextEl.textContent = "Mode de compatibilitat: sense historial intern comprimit. Continua disponible l'exportació JSON manual i la recuperació crítica.";
+      backupStatusTextEl.textContent = "Mode de compatibilitat: sense historial intern comprimit. Continua disponible l'exportació JSON manual i una còpia local de supervivència per recuperar documents i carpetes.";
       return;
     }
 
@@ -4003,7 +4078,7 @@ async function applyPendingAppUpdate() {
 
     const latest = history[0];
     const latestDate = new Date(latest.createdAt);
-    backupStatusTextEl.textContent = `Últim backup: ${latestDate.toLocaleString('ca-ES')} · ${latest.auto ? 'automàtic' : 'manual'} · ${latest.stats.folders} carpetes, ${latest.stats.documents} documents i ${latest.stats.attachments} adjunts.`;
+    backupStatusTextEl.textContent = `Últim backup: ${latestDate.toLocaleString('ca-ES')} · ${latest.auto ? 'automàtic' : 'manual'} · ${latest.stats.folders} carpetes, ${latest.stats.documents} documents i ${latest.stats.attachments} adjunts. També hi ha una còpia local de supervivència del contingut recent.`;
   }
 
   function maybeWarnAboutStaleBackups() {
@@ -4767,8 +4842,8 @@ async function applyPendingAppUpdate() {
   } else if (pendingSafetyRecoverySnapshot) {
     const snapshot = pendingSafetyRecoverySnapshot;
     openConfirm(
-      'Recuperar la darrera còpia local?',
-      `He trobat una còpia local de seguretat del ${new Date(snapshot.createdAt).toLocaleString('ca-ES')}. Si continues, recuperaré carpetes i documents desats en aquesta sessió local.`,
+      'Recuperar la còpia local de supervivència?',
+      `He trobat una còpia local de supervivència del ${new Date(snapshot.createdAt).toLocaleString('ca-ES')}. Si continues, recuperaré carpetes i documents recents encara que IndexedDB s'hagi fet malbé.`,
       async () => {
         docs = normalizeDocs(snapshot.docs || []);
         expandedFolders = normalizeExpandedFolders(snapshot.expandedFolders || [], docs);
@@ -4777,7 +4852,7 @@ async function applyPendingAppUpdate() {
         showToast('Còpia local recuperada correctament.');
       },
       {
-        okLabel: 'Recuperar còpia local',
+        okLabel: 'Recuperar supervivència local',
         onCancel: () => sessionStorage.setItem(DISMISSED_LIGHT_RECOVERY_SESSION_KEY, snapshot.id)
       }
     );
