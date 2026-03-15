@@ -1782,6 +1782,17 @@ ul.doc-list {
   line-height: 1.45;
 }
 
+.workspace-sync-hint {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(14, 165, 233, 0.1);
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  color: #075985;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .workspace-recents {
   margin-top: 14px;
   padding-top: 14px;

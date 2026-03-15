@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const closeWorkspaceBtn = document.getElementById('closeWorkspaceBtn');
   const workspaceFileInput = document.getElementById('workspaceFileInput');
   const workspaceLocalHintEl = document.getElementById('workspaceLocalHint');
+  const workspaceSyncHintEl = document.getElementById('workspaceSyncHint');
   const workspaceRecentListEl = document.getElementById('workspaceRecentList');
   const workspaceRecentEmptyEl = document.getElementById('workspaceRecentEmpty');
   const workspaceRecentCountEl = document.getElementById('workspaceRecentCount');
@@ -321,6 +322,42 @@ function canInstallSutsumu() {
 
 function isStandaloneDisplayMode() {
   return Boolean(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+}
+
+function isIOSLikeDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function canShareFiles() {
+  return Boolean(window.isSecureContext && typeof navigator.share === 'function' && typeof window.File === 'function');
+}
+
+function getWorkspacePortableActionLabel() {
+  if (supportsWorkspaceFiles()) {
+    return {
+      create: 'Crear workspace',
+      open: 'Obrir workspace',
+      save: 'Desar workspace',
+      saveAs: 'Desar com...'
+    };
+  }
+
+  if (canShareFiles() && isIOSLikeDevice()) {
+    return {
+      create: 'Crear a Fitxers',
+      open: 'Obrir de Fitxers',
+      save: 'Desar a Fitxers',
+      saveAs: 'Compartir còpia'
+    };
+  }
+
+  return {
+    create: 'Crear workspace',
+    open: 'Obrir workspace',
+    save: 'Desar workspace',
+    saveAs: 'Desar com...'
+  };
 }
 
 function updateQuickStartUI(forceOpen = false) {
@@ -1641,8 +1678,18 @@ async function applyPendingAppUpdate() {
       showToast('Aquest workspace recent ja no té dades descarregables.', 'error');
       return;
     }
-    triggerDownload(entry.fileName || `${slugifyFileName(entry.name)}${WORKSPACE_FILE_EXTENSION}`, JSON.stringify(entry.payload, null, 2), 'application/json;charset=utf-8');
-    showToast(`Workspace descarregat: ${entry.name}`);
+    const fileName = entry.fileName || `${slugifyFileName(entry.name)}${WORKSPACE_FILE_EXTENSION}`;
+    const shared = !supportsWorkspaceFiles() ? await shareWorkspaceFile(fileName, entry.payload) : false;
+    if (shared === null) {
+      showToast('Compartició del workspace cancel·lada.', 'info');
+      return;
+    }
+    if (!shared) {
+      triggerDownload(fileName, JSON.stringify(entry.payload, null, 2), 'application/json;charset=utf-8');
+      showToast(`Workspace descarregat: ${entry.name}`);
+      return;
+    }
+    showToast("Workspace enviat a Compartir. Desa'l a Fitxers/iCloud si vols reutilitzar-lo en altres dispositius.");
   }
 
   async function openRecentWorkspace(entryId) {
@@ -1745,6 +1792,11 @@ async function applyPendingAppUpdate() {
 
     const fsSupported = supportsWorkspaceFiles();
     const hasData = docs.length > 0;
+    const labels = getWorkspacePortableActionLabel();
+    createWorkspaceBtn.textContent = labels.create;
+    openWorkspaceBtn.textContent = labels.open;
+    saveWorkspaceBtn.textContent = labels.save;
+    saveWorkspaceAsBtn.textContent = labels.saveAs;
     createWorkspaceBtn.disabled = isWorkspaceSaving;
     openWorkspaceBtn.disabled = isWorkspaceSaving;
     saveWorkspaceBtn.disabled = isWorkspaceSaving || (!hasWorkspaceSession() && !hasData);
@@ -1754,6 +1806,13 @@ async function applyPendingAppUpdate() {
     if (workspaceLocalHintEl) {
       const showLocalHint = !isWorkspaceSaving && !hasWorkspaceSession() && hasData;
       workspaceLocalHintEl.classList.toggle('hidden', !showLocalHint);
+    }
+
+    if (workspaceSyncHintEl) {
+      const iPhoneFlow = canShareFiles() && isIOSLikeDevice() && !fsSupported;
+      workspaceSyncHintEl.textContent = iPhoneFlow
+        ? 'Flux recomanat per sincronitzar: obre el mateix workspace des de Fitxers/iCloud Drive, edita, prem “Desar a Fitxers” i al full Compartir tria “Desa a Fitxers” sobre el mateix fitxer.'
+        : "Per sincronitzar Mac i iPhone, guarda sempre el mateix fitxer workspace a iCloud Drive o Fitxers i torna'l a obrir des de cada dispositiu quan vulguis refrescar dades.";
     }
 
     const savedLabel = workspaceMeta?.lastSavedAt
@@ -1779,7 +1838,7 @@ async function applyPendingAppUpdate() {
     if (isPortableWorkspaceMode()) {
       workspaceModeBadgeEl.textContent = workspaceDirty ? 'Pendent' : 'Compatible';
       workspaceStatusTextEl.textContent = workspaceDirty
-        ? `Workspace compatible: ${getWorkspaceDisplayName()}. Hi ha canvis pendents; prem “Desar workspace” per descarregar el JSON actualitzat.`
+        ? `Workspace compatible: ${getWorkspaceDisplayName()}. Hi ha canvis pendents; prem “${labels.save}” per exportar el JSON actualitzat.`
         : `Workspace compatible: ${getWorkspaceDisplayName()}. Última sincronització manual: ${savedLabel}.`;
       renderRecentWorkspaces();
       return;
@@ -1928,6 +1987,26 @@ async function applyPendingAppUpdate() {
     if (!silent) showToast('Workspace desconnectat. Sutsumu continua en mode local.');
   }
 
+  async function shareWorkspaceFile(fileName, payload) {
+    if (!canShareFiles()) return false;
+    try {
+      const file = new File([JSON.stringify(payload, null, 2)], fileName, { type: 'application/json' });
+      if (typeof navigator.canShare === 'function' && !navigator.canShare({ files: [file] })) {
+        return false;
+      }
+      await navigator.share({
+        title: fileName,
+        text: 'Desa aquest workspace a Fitxers o iCloud Drive per mantenir la sincronització manual entre dispositius.',
+        files: [file]
+      });
+      return true;
+    } catch (err) {
+      if (err?.name === 'AbortError') return null;
+      console.warn("No s'ha pogut obrir el full de compartir del workspace.", err);
+      return false;
+    }
+  }
+
   async function saveWorkspacePortable(reason = 'workspace-portable-save', options = {}) {
     const { silent = false, force = false } = options;
     const signature = createWorkspaceSignature(docs, expandedFolders);
@@ -1942,7 +2021,20 @@ async function applyPendingAppUpdate() {
     try {
       const payload = await createWorkspacePayload(reason);
       const fileName = getWorkspaceSuggestedFilename();
-      triggerDownload(fileName, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
+      let exportedViaShare = false;
+      if (!supportsWorkspaceFiles()) {
+        const shareResult = await shareWorkspaceFile(fileName, payload);
+        if (shareResult === null) {
+          workspaceDirty = true;
+          updateWorkspaceUI();
+          if (!silent) showToast('Desat del workspace cancel·lat.', 'info');
+          return false;
+        }
+        exportedViaShare = shareResult === true;
+      }
+      if (!exportedViaShare) {
+        triggerDownload(fileName, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
+      }
       workspaceMeta = {
         id: payload.workspaceId,
         name: normalizeWorkspaceName(payload.workspaceName || fileName),
@@ -1954,7 +2046,11 @@ async function applyPendingAppUpdate() {
       await persistWorkspaceBinding();
       await rememberRecentWorkspace(payload, { mode: 'portable', source: reason, fileName });
       updateWorkspaceUI();
-      if (!silent) showToast(`Workspace descarregat: ${fileName}`);
+      if (!silent) {
+        showToast(exportedViaShare
+          ? "Workspace enviat a Compartir. Desa'l a Fitxers/iCloud sobre el mateix fitxer per sincronitzar-lo."
+          : `Workspace descarregat: ${fileName}`);
+      }
       return true;
     } catch (err) {
       console.warn("No s'ha pogut descarregar el workspace compatible.", err);
