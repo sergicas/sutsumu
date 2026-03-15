@@ -141,6 +141,35 @@ test('builds local shadow revisions and exports an immutable shadow bundle', asy
   expect(Boolean(chainedRevision)).toBeTruthy();
 });
 
+test('imports a remote shadow bundle and detects a remote head safely', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio Remot Seguro',
+    content: 'Head remot de prova',
+    tags: 'remote, shadow'
+  });
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('remote-shadow-bundle.json');
+  await exportDownload.saveAs(bundlePath);
+
+  const remoteContext = await browser.newContext();
+  const remotePage = await remoteContext.newPage();
+  await gotoApp(remotePage);
+  await remotePage.locator('#remoteShadowFileInput').setInputFiles(bundlePath);
+  await expectToast(remotePage, 'Bundle remot importat');
+  await expect(remotePage.locator('#syncRemoteBadge')).toContainText('Remot disponible');
+  await expect(remotePage.locator('#syncRemoteStatusText')).toContainText('revisió remota disponible');
+  await remoteContext.close();
+});
+
 test('writes an automatic external backup and keeps the last good copy if the app becomes empty', async ({ page }) => {
   await installExternalBackupStub(page);
   await gotoApp(page);

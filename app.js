@@ -72,6 +72,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   const syncShadowHeadValueEl = document.getElementById('syncShadowHeadValue');
   const syncShadowBaseValueEl = document.getElementById('syncShadowBaseValue');
   const syncShadowUpdatedValueEl = document.getElementById('syncShadowUpdatedValue');
+  const syncRemoteStatusTextEl = document.getElementById('syncRemoteStatusText');
+  const syncRemoteBadgeEl = document.getElementById('syncRemoteBadge');
+  const syncRemoteSourceValueEl = document.getElementById('syncRemoteSourceValue');
+  const syncRemoteHeadValueEl = document.getElementById('syncRemoteHeadValue');
+  const syncRemoteCompareValueEl = document.getElementById('syncRemoteCompareValue');
+  const syncRemoteImportedValueEl = document.getElementById('syncRemoteImportedValue');
+  const importRemoteShadowBtn = document.getElementById('importRemoteShadowBtn');
+  const clearRemoteShadowBtn = document.getElementById('clearRemoteShadowBtn');
+  const recheckRemoteShadowBtn = document.getElementById('recheckRemoteShadowBtn');
+  const remoteShadowFileInput = document.getElementById('remoteShadowFileInput');
   const forceShadowRevisionBtn = document.getElementById('forceShadowRevisionBtn');
   const exportShadowBundleBtn = document.getElementById('exportShadowBundleBtn');
   const clearShadowHistoryBtn = document.getElementById('clearShadowHistoryBtn');
@@ -251,6 +261,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const SHADOW_SYNC_HISTORY_KEY = 'sutsumu_shadow_sync_history_v1';
   const SHADOW_SYNC_HISTORY_LIMIT = 18;
   const SHADOW_SYNC_DEBOUNCE_MS = 1800;
+  const REMOTE_SHADOW_SOURCE_KEY = 'sutsumu_remote_shadow_source_v1';
   const SYNCABLE_COLLECTIONS = Object.freeze(['documents', 'folders', 'tags', 'versions', 'attachmentMetadata']);
   const LOCAL_ONLY_COLLECTIONS = Object.freeze(['expandedFolders', 'recentDocs', 'recentWorkspaces', 'draftsLocals', 'backupHistories', 'workspaceHandles', 'uiState']);
   const SYNCABLE_COLLECTION_LABELS = Object.freeze(['documents', 'carpetes', 'etiquetes', 'versions', "metadades d'adjunts"]);
@@ -325,6 +336,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let shadowSyncState = null;
   let shadowSyncHistory = [];
   let shadowSyncTimer = null;
+  let remoteShadowSource = null;
   let workspaceAutosaveTimer = null;
   let isWorkspaceSaving = false;
   let workspaceLastSavedSignature = '';
@@ -707,6 +719,7 @@ function updateSyncPreparationUI() {
   if (syncPrepSignatureValueEl) syncPrepSignatureValueEl.textContent = state.signature;
   renderSyncPreparationChipList(syncPrepIncludedListEl, SYNCABLE_COLLECTION_LABELS, 'sync');
   renderSyncPreparationChipList(syncPrepLocalOnlyListEl, LOCAL_ONLY_COLLECTION_LABELS, 'local');
+  updateRemoteShadowUI();
 }
 
 function refreshSyncPreparationState(reason = 'local-change') {
@@ -1008,6 +1021,7 @@ function updateShadowSyncUI() {
   if (syncShadowHeadValueEl) syncShadowHeadValueEl.textContent = latest ? createShadowSyncShortId(latest.revisionId) : 'pendent';
   if (syncShadowBaseValueEl) syncShadowBaseValueEl.textContent = latest?.baseRevisionId ? createShadowSyncShortId(latest.baseRevisionId) : 'arrel';
   if (syncShadowUpdatedValueEl) syncShadowUpdatedValueEl.textContent = formatShadowSyncMoment(state.lastQueuedAt);
+  updateRemoteShadowUI();
 }
 
 async function clearShadowSyncHistory() {
@@ -1036,6 +1050,207 @@ async function clearShadowSyncHistory() {
       warningText: 'Aquesta operació només afecta el registre local de revisions preparades per al futur núvol.'
     }
   );
+}
+
+function normalizeRemoteShadowSource(rawSource) {
+  if (!rawSource || typeof rawSource !== 'object') return null;
+  const revisions = normalizeShadowSyncHistory(rawSource.revisions);
+  const state = normalizeShadowSyncState(rawSource.state);
+  const sourceName = typeof rawSource.sourceName === 'string' && rawSource.sourceName.trim() ? rawSource.sourceName.trim() : 'bundle-remot.json';
+  const importedAt = typeof rawSource.importedAt === 'string' && !Number.isNaN(Date.parse(rawSource.importedAt))
+    ? rawSource.importedAt
+    : new Date().toISOString();
+  const headRevisionId = state.lastRevisionId || revisions[0]?.revisionId || '';
+  return {
+    schema: rawSource.schema === SHADOW_SYNC_BUNDLE_SCHEMA ? rawSource.schema : SHADOW_SYNC_BUNDLE_SCHEMA,
+    version: Number(rawSource.version || 1),
+    sourceName,
+    importedAt,
+    state: {
+      ...state,
+      lastRevisionId: headRevisionId,
+      historyCount: revisions.length
+    },
+    revisions
+  };
+}
+
+function readRemoteShadowSourceSnapshot() {
+  return normalizeRemoteShadowSource(safeJSONParse(localStorage.getItem(REMOTE_SHADOW_SOURCE_KEY), null));
+}
+
+function writeRemoteShadowSourceSnapshot(source) {
+  if (!source) {
+    localStorage.removeItem(REMOTE_SHADOW_SOURCE_KEY);
+    remoteShadowSource = null;
+    updateRemoteShadowUI();
+    return null;
+  }
+  const normalized = normalizeRemoteShadowSource(source);
+  try {
+    localStorage.setItem(REMOTE_SHADOW_SOURCE_KEY, JSON.stringify(normalized));
+  } catch (err) {
+    console.warn("No s'ha pogut persistir la font remota de shadow sync.", err);
+  }
+  remoteShadowSource = normalized;
+  updateRemoteShadowUI();
+  return normalized;
+}
+
+function getShadowHistoryHead(history = shadowSyncHistory, preferredRevisionId = '') {
+  const normalizedHistory = normalizeShadowSyncHistory(history);
+  if (!normalizedHistory.length) return null;
+  if (preferredRevisionId) {
+    const preferred = normalizedHistory.find(entry => entry.revisionId === preferredRevisionId);
+    if (preferred) return preferred;
+  }
+  return normalizedHistory[0];
+}
+
+function buildShadowRevisionAncestry(history, headRevisionId) {
+  const byId = new Map(normalizeShadowSyncHistory(history).map(entry => [entry.revisionId, entry]));
+  const visited = new Set();
+  let cursor = headRevisionId;
+  while (cursor && byId.has(cursor) && !visited.has(cursor)) {
+    visited.add(cursor);
+    cursor = byId.get(cursor)?.baseRevisionId || '';
+  }
+  return visited;
+}
+
+function computeRemoteShadowComparison() {
+  const remoteHead = getShadowHistoryHead(remoteShadowSource?.revisions || [], remoteShadowSource?.state?.lastRevisionId || '');
+  const localHead = getShadowHistoryHead(shadowSyncHistory, shadowSyncState?.lastRevisionId || '');
+  const localWorkspaceId = syncPrepState?.workspace?.id || '';
+  const remoteWorkspaceId = remoteHead?.workspaceId || remoteHead?.payload?.workspace?.id || '';
+
+  if (!remoteHead) {
+    return {
+      status: 'no-remote',
+      label: 'Sense remot',
+      description: 'Encara no hi ha cap bundle remot importat per comparar.',
+      localHead,
+      remoteHead
+    };
+  }
+
+  if (!localHead) {
+    return {
+      status: 'remote-only',
+      label: 'Remot disponible',
+      description: 'Hi ha una revisió remota disponible, però aquest dispositiu encara no té cap head local comparable.',
+      localHead,
+      remoteHead
+    };
+  }
+
+  if (localWorkspaceId && remoteWorkspaceId && localWorkspaceId !== remoteWorkspaceId) {
+    return {
+      status: 'other-workspace',
+      label: 'Un altre workspace',
+      description: 'El bundle remot pertany a un workspace diferent. No es compararà ni s\'aplicarà automàticament.',
+      localHead,
+      remoteHead
+    };
+  }
+
+  if (localHead.payloadSignature && remoteHead.payloadSignature && localHead.payloadSignature === remoteHead.payloadSignature) {
+    return {
+      status: 'in-sync',
+      label: 'Al dia',
+      description: 'El head local i el remot comparteixen exactament el mateix payload base.',
+      localHead,
+      remoteHead
+    };
+  }
+
+  const localAncestry = buildShadowRevisionAncestry(shadowSyncHistory, localHead.revisionId);
+  const remoteAncestry = buildShadowRevisionAncestry(remoteShadowSource?.revisions || [], remoteHead.revisionId);
+
+  if (remoteAncestry.has(localHead.revisionId)) {
+    return {
+      status: 'remote-ahead',
+      label: 'Remot més nou',
+      description: 'El bundle remot conté una revisió més avançada que el head local d\'aquest dispositiu.',
+      localHead,
+      remoteHead
+    };
+  }
+
+  if (localAncestry.has(remoteHead.revisionId)) {
+    return {
+      status: 'local-ahead',
+      label: 'Local més nou',
+      description: 'Aquest dispositiu ja té una revisió local més nova que la importada com a remot.',
+      localHead,
+      remoteHead
+    };
+  }
+
+  return {
+    status: 'diverged',
+    label: 'Divergència',
+    description: 'El head local i el remot han evolucionat per branques diferents. Caldrà resolució de conflicte abans d\'un pull/push real.',
+    localHead,
+    remoteHead
+  };
+}
+
+function updateRemoteShadowUI() {
+  if (!syncRemoteStatusTextEl || !syncRemoteBadgeEl) return;
+  const comparison = computeRemoteShadowComparison();
+  const remoteHead = comparison.remoteHead;
+  syncRemoteBadgeEl.textContent = comparison.label;
+  syncRemoteStatusTextEl.textContent = comparison.description;
+  if (syncRemoteSourceValueEl) syncRemoteSourceValueEl.textContent = remoteShadowSource?.sourceName || 'encara no';
+  if (syncRemoteHeadValueEl) syncRemoteHeadValueEl.textContent = remoteHead ? createShadowSyncShortId(remoteHead.revisionId) : 'pendent';
+  if (syncRemoteCompareValueEl) syncRemoteCompareValueEl.textContent = comparison.label;
+  if (syncRemoteImportedValueEl) syncRemoteImportedValueEl.textContent = formatShadowSyncMoment(remoteShadowSource?.importedAt || '');
+  if (clearRemoteShadowBtn) clearRemoteShadowBtn.disabled = !remoteShadowSource;
+  if (recheckRemoteShadowBtn) recheckRemoteShadowBtn.disabled = !remoteShadowSource;
+}
+
+async function importRemoteShadowBundleFile(file) {
+  if (!file) return false;
+  try {
+    const parsed = JSON.parse(await file.text());
+    if (parsed?.schema !== SHADOW_SYNC_BUNDLE_SCHEMA || !Array.isArray(parsed?.revisions)) {
+      throw new Error('Aquest JSON no és un bundle shadow compatible.');
+    }
+    const normalized = writeRemoteShadowSourceSnapshot({
+      ...parsed,
+      sourceName: file.name || 'bundle-remot.json',
+      importedAt: new Date().toISOString()
+    });
+    const comparison = computeRemoteShadowComparison();
+    showToast(`Bundle remot importat: ${normalized?.sourceName || file.name}`);
+    if (comparison.status === 'remote-ahead') {
+      showToast('He detectat un head remot més nou. Encara no faré cap pull automàtic en aquesta fase.', 'info');
+    } else if (comparison.status === 'diverged') {
+      showToast('Hi ha divergència entre local i remot. La sync real haurà de resoldre-ho explícitament.', 'info');
+    }
+    return true;
+  } catch (err) {
+    console.warn("No s'ha pogut importar el bundle remot de shadow sync.", err);
+    showToast(err?.message || "No s'ha pogut importar aquest bundle remot.", 'error');
+    return false;
+  }
+}
+
+function promptRemoteShadowImport() {
+  if (!remoteShadowFileInput) {
+    showToast('No s\'ha trobat el selector del bundle remot.', 'error');
+    return;
+  }
+  remoteShadowFileInput.value = '';
+  remoteShadowFileInput.click();
+}
+
+function clearRemoteShadowSource() {
+  if (!remoteShadowSource) return;
+  const label = remoteShadowSource.sourceName;
+  writeRemoteShadowSourceSnapshot(null);
+  showToast(`Bundle remot desconnectat: ${label}`, 'info');
 }
 
 function updatePwaUI() {
@@ -6079,10 +6294,12 @@ async function applyPendingAppUpdate() {
   ensureSyncPrepMeta();
   shadowSyncHistory = await readShadowSyncHistory();
   shadowSyncState = await readShadowSyncState();
+  remoteShadowSource = readRemoteShadowSourceSnapshot();
   updateBackupStatusUI();
   updateAttachmentHealthUI();
   updateExternalBackupUI();
   updateShadowSyncUI();
+  updateRemoteShadowUI();
   await restorePersistedExternalBackupBinding();
   await restorePersistedWorkspaceBinding();
   refreshSyncPreparationState('bootstrap');
@@ -6178,6 +6395,18 @@ async function applyPendingAppUpdate() {
   });
   forceShadowRevisionBtn?.addEventListener('click', () => {
     createShadowRevisionNow('shadow-manual-forced', { silent: false, force: true });
+  });
+  importRemoteShadowBtn?.addEventListener('click', promptRemoteShadowImport);
+  clearRemoteShadowBtn?.addEventListener('click', clearRemoteShadowSource);
+  recheckRemoteShadowBtn?.addEventListener('click', () => {
+    updateRemoteShadowUI();
+    const comparison = computeRemoteShadowComparison();
+    showToast(`Comparació remota actual: ${comparison.label}`);
+  });
+  remoteShadowFileInput?.addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (file) await importRemoteShadowBundleFile(file);
+    event.target.value = '';
   });
   exportShadowBundleBtn?.addEventListener('click', async () => {
     if (!shadowSyncHistory.length) {

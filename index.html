@@ -357,6 +357,42 @@
                     <button id="exportShadowBundleBtn" type="button" class="btn btn-secondary btn-small">Exportar bundle shadow</button>
                     <button id="clearShadowHistoryBtn" type="button" class="btn btn-danger-ghost btn-small">Netejar shadow</button>
                   </div>
+                  <div class="sync-shadow-remote-card">
+                    <div class="sync-shadow-header">
+                      <div>
+                        <div class="sync-prep-list-label">Lectura remota segura</div>
+                        <p id="syncRemoteStatusText" class="sync-prep-text">Encara no hi ha cap bundle remot importat per comparar.</p>
+                      </div>
+                      <span id="syncRemoteBadge" class="badge sync-prep-badge">Sense remot</span>
+                    </div>
+                    <div class="sync-prep-grid">
+                      <div class="sync-prep-stat-card">
+                        <span class="sync-prep-stat-label">Font remota</span>
+                        <strong id="syncRemoteSourceValue" class="sync-prep-stat-value">encara no</strong>
+                      </div>
+                      <div class="sync-prep-stat-card">
+                        <span class="sync-prep-stat-label">Head remot</span>
+                        <strong id="syncRemoteHeadValue" class="sync-prep-stat-value">pendent</strong>
+                      </div>
+                      <div class="sync-prep-stat-card">
+                        <span class="sync-prep-stat-label">Comparació</span>
+                        <strong id="syncRemoteCompareValue" class="sync-prep-stat-value">Sense remot</strong>
+                      </div>
+                      <div class="sync-prep-stat-card">
+                        <span class="sync-prep-stat-label">Importat</span>
+                        <strong id="syncRemoteImportedValue" class="sync-prep-stat-value">encara no</strong>
+                      </div>
+                    </div>
+                    <div class="sync-shadow-hint">
+                      Aquesta fase només llegeix i compara un head remot. Encara no aplicarà canvis a cegues sobre l'app local.
+                    </div>
+                    <div class="sync-prep-actions">
+                      <button id="importRemoteShadowBtn" type="button" class="btn btn-secondary btn-small">Importar bundle remot</button>
+                      <button id="recheckRemoteShadowBtn" type="button" class="btn btn-secondary btn-small" disabled>Comparar ara</button>
+                      <button id="clearRemoteShadowBtn" type="button" class="btn btn-danger-ghost btn-small" disabled>Desconnectar remot</button>
+                      <input id="remoteShadowFileInput" type="file" accept=".json,application/json" hidden />
+                    </div>
+                  </div>
                 </div>
               </div>
               <div id="quickStartCard" class="quickstart-card hidden">
