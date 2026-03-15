@@ -2031,10 +2031,25 @@ ul.doc-list {
   border-top: 1px dashed rgba(15, 23, 42, 0.12);
 }
 
+.sync-remote-url-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.sync-remote-url-row input {
+  flex: 1;
+  min-width: 0;
+}
+
 @media (max-width: 760px) {
   .sync-prep-grid,
   .sync-prep-lists {
     grid-template-columns: 1fr;
+  }
+
+  .sync-remote-url-row {
+    flex-direction: column;
   }
 }
 

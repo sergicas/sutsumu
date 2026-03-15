@@ -170,6 +170,45 @@ test('imports a remote shadow bundle and detects a remote head safely', async ({
   await remoteContext.close();
 });
 
+test('connects a remote shadow URL and compares it safely', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio URL Remota',
+    content: 'Bundle remot via URL',
+    tags: 'remote, url'
+  });
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('remote-shadow-url-bundle.json');
+  await exportDownload.saveAs(bundlePath);
+  const bundleBody = require('fs').readFileSync(bundlePath, 'utf8');
+
+  const remoteContext = await browser.newContext();
+  await remoteContext.route('https://shadow.example/sutsumu.json', route => route.fulfill({
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*'
+    },
+    body: bundleBody
+  }));
+  const remotePage = await remoteContext.newPage();
+  await gotoApp(remotePage);
+  await remotePage.locator('#remoteShadowUrl').fill('https://shadow.example/sutsumu.json');
+  await remotePage.locator('#connectRemoteShadowUrlBtn').click();
+  await expectToast(remotePage, 'URL remota connectada');
+  await expect(remotePage.locator('#syncRemoteBadge')).toContainText('Remot disponible');
+  await expect(remotePage.locator('#syncRemoteSourceValue')).toContainText('https://shadow.example/sutsumu.json');
+  await remoteContext.close();
+});
+
 test('writes an automatic external backup and keeps the last good copy if the app becomes empty', async ({ page }) => {
   await installExternalBackupStub(page);
   await gotoApp(page);

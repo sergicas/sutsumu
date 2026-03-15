@@ -78,6 +78,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const syncRemoteHeadValueEl = document.getElementById('syncRemoteHeadValue');
   const syncRemoteCompareValueEl = document.getElementById('syncRemoteCompareValue');
   const syncRemoteImportedValueEl = document.getElementById('syncRemoteImportedValue');
+  const remoteShadowUrlInput = document.getElementById('remoteShadowUrl');
+  const connectRemoteShadowUrlBtn = document.getElementById('connectRemoteShadowUrlBtn');
   const importRemoteShadowBtn = document.getElementById('importRemoteShadowBtn');
   const clearRemoteShadowBtn = document.getElementById('clearRemoteShadowBtn');
   const recheckRemoteShadowBtn = document.getElementById('recheckRemoteShadowBtn');
@@ -262,6 +264,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const SHADOW_SYNC_HISTORY_LIMIT = 18;
   const SHADOW_SYNC_DEBOUNCE_MS = 1800;
   const REMOTE_SHADOW_SOURCE_KEY = 'sutsumu_remote_shadow_source_v1';
+  const REMOTE_SHADOW_CONFIG_KEY = 'sutsumu_remote_shadow_config_v1';
   const SYNCABLE_COLLECTIONS = Object.freeze(['documents', 'folders', 'tags', 'versions', 'attachmentMetadata']);
   const LOCAL_ONLY_COLLECTIONS = Object.freeze(['expandedFolders', 'recentDocs', 'recentWorkspaces', 'draftsLocals', 'backupHistories', 'workspaceHandles', 'uiState']);
   const SYNCABLE_COLLECTION_LABELS = Object.freeze(['documents', 'carpetes', 'etiquetes', 'versions', "metadades d'adjunts"]);
@@ -337,6 +340,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let shadowSyncHistory = [];
   let shadowSyncTimer = null;
   let remoteShadowSource = null;
+  let remoteShadowConfig = null;
   let workspaceAutosaveTimer = null;
   let isWorkspaceSaving = false;
   let workspaceLastSavedSignature = '';
@@ -1079,6 +1083,48 @@ function readRemoteShadowSourceSnapshot() {
   return normalizeRemoteShadowSource(safeJSONParse(localStorage.getItem(REMOTE_SHADOW_SOURCE_KEY), null));
 }
 
+function normalizeRemoteShadowConfig(rawConfig) {
+  if (!rawConfig || typeof rawConfig !== 'object') return null;
+  const trimmedUrl = typeof rawConfig.url === 'string' ? rawConfig.url.trim() : '';
+  if (!trimmedUrl) return null;
+  return {
+    mode: 'url',
+    url: trimmedUrl,
+    lastFetchedAt: typeof rawConfig.lastFetchedAt === 'string' ? rawConfig.lastFetchedAt : '',
+    lastStatus: typeof rawConfig.lastStatus === 'string' ? rawConfig.lastStatus : 'idle',
+    lastError: typeof rawConfig.lastError === 'string' ? rawConfig.lastError : '',
+    autoCheckOnStart: rawConfig.autoCheckOnStart !== false
+  };
+}
+
+function readRemoteShadowConfigSnapshot() {
+  return normalizeRemoteShadowConfig(safeJSONParse(localStorage.getItem(REMOTE_SHADOW_CONFIG_KEY), null));
+}
+
+function writeRemoteShadowConfigSnapshot(config) {
+  if (!config) {
+    localStorage.removeItem(REMOTE_SHADOW_CONFIG_KEY);
+    remoteShadowConfig = null;
+    updateRemoteShadowUI();
+    return null;
+  }
+  const normalized = normalizeRemoteShadowConfig(config);
+  if (!normalized) {
+    localStorage.removeItem(REMOTE_SHADOW_CONFIG_KEY);
+    remoteShadowConfig = null;
+    updateRemoteShadowUI();
+    return null;
+  }
+  try {
+    localStorage.setItem(REMOTE_SHADOW_CONFIG_KEY, JSON.stringify(normalized));
+  } catch (err) {
+    console.warn("No s'ha pogut persistir la configuració remota de shadow sync.", err);
+  }
+  remoteShadowConfig = normalized;
+  updateRemoteShadowUI();
+  return normalized;
+}
+
 function writeRemoteShadowSourceSnapshot(source) {
   if (!source) {
     localStorage.removeItem(REMOTE_SHADOW_SOURCE_KEY);
@@ -1095,6 +1141,83 @@ function writeRemoteShadowSourceSnapshot(source) {
   remoteShadowSource = normalized;
   updateRemoteShadowUI();
   return normalized;
+}
+
+function getRemoteShadowSourceLabel() {
+  if (remoteShadowConfig?.url) return remoteShadowConfig.url;
+  return remoteShadowSource?.sourceName || 'encara no';
+}
+
+async function fetchRemoteShadowBundleFromUrl(url) {
+  const response = await fetch(url, {
+    method: 'GET',
+    cache: 'no-store',
+    headers: { 'Accept': 'application/json' }
+  });
+  if (!response.ok) {
+    throw new Error(`No s'ha pogut llegir la URL remota (${response.status}).`);
+  }
+  const parsed = await response.json();
+  if (parsed?.schema !== SHADOW_SYNC_BUNDLE_SCHEMA || !Array.isArray(parsed?.revisions)) {
+    throw new Error('La URL remota no retorna un bundle shadow compatible.');
+  }
+  return parsed;
+}
+
+async function connectRemoteShadowUrl(options = {}) {
+  const { silent = false } = options;
+  const rawUrl = String(remoteShadowUrlInput?.value || remoteShadowConfig?.url || '').trim();
+  if (!rawUrl) {
+    showToast('Introdueix una URL de bundle remot.', 'error');
+    return false;
+  }
+
+  if (!/^https?:\/\//i.test(rawUrl) && !rawUrl.startsWith('/')) {
+    showToast('La URL remota ha de començar per https://, http:// o /.', 'error');
+    return false;
+  }
+
+  writeRemoteShadowConfigSnapshot({
+    url: rawUrl,
+    lastStatus: 'checking',
+    lastFetchedAt: remoteShadowConfig?.lastFetchedAt || '',
+    lastError: '',
+    autoCheckOnStart: true
+  });
+  try {
+    const parsed = await fetchRemoteShadowBundleFromUrl(rawUrl);
+    const normalized = writeRemoteShadowSourceSnapshot({
+      ...parsed,
+      sourceName: rawUrl,
+      importedAt: new Date().toISOString()
+    });
+    writeRemoteShadowConfigSnapshot({
+      url: rawUrl,
+      lastStatus: 'connected',
+      lastFetchedAt: new Date().toISOString(),
+      lastError: '',
+      autoCheckOnStart: true
+    });
+    const comparison = computeRemoteShadowComparison();
+    if (!silent) {
+      showToast(`URL remota connectada: ${normalized?.sourceName || rawUrl}`);
+      if (comparison.status === 'remote-ahead') {
+        showToast('El remot va per davant. Encara no faré pull automàtic en aquesta fase.', 'info');
+      }
+    }
+    return true;
+  } catch (err) {
+    console.warn("No s'ha pogut connectar la URL remota de shadow sync.", err);
+    writeRemoteShadowConfigSnapshot({
+      url: rawUrl,
+      lastStatus: 'error',
+      lastFetchedAt: remoteShadowConfig?.lastFetchedAt || '',
+      lastError: err?.message || 'remote-fetch-error',
+      autoCheckOnStart: true
+    });
+    if (!silent) showToast(err?.message || "No s'ha pogut connectar la URL remota.", 'error');
+    return false;
+  }
 }
 
 function getShadowHistoryHead(history = shadowSyncHistory, preferredRevisionId = '') {
@@ -1200,14 +1323,26 @@ function updateRemoteShadowUI() {
   if (!syncRemoteStatusTextEl || !syncRemoteBadgeEl) return;
   const comparison = computeRemoteShadowComparison();
   const remoteHead = comparison.remoteHead;
+  let description = comparison.description;
+  if (remoteShadowConfig?.lastStatus === 'error' && remoteShadowConfig.lastError) {
+    description = `${comparison.description} Últim error remot: ${remoteShadowConfig.lastError}`;
+  } else if (remoteShadowConfig?.lastStatus === 'checking') {
+    description = 'Comprovant la URL remota configurada...';
+  }
   syncRemoteBadgeEl.textContent = comparison.label;
-  syncRemoteStatusTextEl.textContent = comparison.description;
-  if (syncRemoteSourceValueEl) syncRemoteSourceValueEl.textContent = remoteShadowSource?.sourceName || 'encara no';
+  syncRemoteStatusTextEl.textContent = description;
+  if (syncRemoteSourceValueEl) syncRemoteSourceValueEl.textContent = getRemoteShadowSourceLabel();
   if (syncRemoteHeadValueEl) syncRemoteHeadValueEl.textContent = remoteHead ? createShadowSyncShortId(remoteHead.revisionId) : 'pendent';
   if (syncRemoteCompareValueEl) syncRemoteCompareValueEl.textContent = comparison.label;
-  if (syncRemoteImportedValueEl) syncRemoteImportedValueEl.textContent = formatShadowSyncMoment(remoteShadowSource?.importedAt || '');
-  if (clearRemoteShadowBtn) clearRemoteShadowBtn.disabled = !remoteShadowSource;
-  if (recheckRemoteShadowBtn) recheckRemoteShadowBtn.disabled = !remoteShadowSource;
+  if (syncRemoteImportedValueEl) {
+    syncRemoteImportedValueEl.textContent = formatShadowSyncMoment(remoteShadowConfig?.lastFetchedAt || remoteShadowSource?.importedAt || '');
+  }
+  if (remoteShadowUrlInput && document.activeElement !== remoteShadowUrlInput) {
+    remoteShadowUrlInput.value = remoteShadowConfig?.url || '';
+  }
+  if (connectRemoteShadowUrlBtn) connectRemoteShadowUrlBtn.disabled = !String(remoteShadowUrlInput?.value || remoteShadowConfig?.url || '').trim();
+  if (clearRemoteShadowBtn) clearRemoteShadowBtn.disabled = !remoteShadowSource && !remoteShadowConfig;
+  if (recheckRemoteShadowBtn) recheckRemoteShadowBtn.disabled = !remoteShadowSource && !remoteShadowConfig?.url;
 }
 
 async function importRemoteShadowBundleFile(file) {
@@ -1222,6 +1357,7 @@ async function importRemoteShadowBundleFile(file) {
       sourceName: file.name || 'bundle-remot.json',
       importedAt: new Date().toISOString()
     });
+    writeRemoteShadowConfigSnapshot(null);
     const comparison = computeRemoteShadowComparison();
     showToast(`Bundle remot importat: ${normalized?.sourceName || file.name}`);
     if (comparison.status === 'remote-ahead') {
@@ -1247,9 +1383,10 @@ function promptRemoteShadowImport() {
 }
 
 function clearRemoteShadowSource() {
-  if (!remoteShadowSource) return;
-  const label = remoteShadowSource.sourceName;
+  if (!remoteShadowSource && !remoteShadowConfig) return;
+  const label = remoteShadowConfig?.url || remoteShadowSource?.sourceName || 'remot';
   writeRemoteShadowSourceSnapshot(null);
+  writeRemoteShadowConfigSnapshot(null);
   showToast(`Bundle remot desconnectat: ${label}`, 'info');
 }
 
@@ -6295,6 +6432,7 @@ async function applyPendingAppUpdate() {
   shadowSyncHistory = await readShadowSyncHistory();
   shadowSyncState = await readShadowSyncState();
   remoteShadowSource = readRemoteShadowSourceSnapshot();
+  remoteShadowConfig = readRemoteShadowConfigSnapshot();
   updateBackupStatusUI();
   updateAttachmentHealthUI();
   updateExternalBackupUI();
@@ -6307,6 +6445,9 @@ async function applyPendingAppUpdate() {
     await createShadowRevisionNow('shadow-bootstrap-seed', { silent: true, force: false });
   } else {
     updateShadowSyncUI();
+  }
+  if (remoteShadowConfig?.url && remoteShadowConfig.autoCheckOnStart) {
+    await connectRemoteShadowUrl({ silent: true });
   }
   await registerPwaSupport();
   updateQuickStartUI();
@@ -6396,9 +6537,19 @@ async function applyPendingAppUpdate() {
   forceShadowRevisionBtn?.addEventListener('click', () => {
     createShadowRevisionNow('shadow-manual-forced', { silent: false, force: true });
   });
+  remoteShadowUrlInput?.addEventListener('input', () => {
+    if (connectRemoteShadowUrlBtn) {
+      connectRemoteShadowUrlBtn.disabled = !remoteShadowUrlInput.value.trim();
+    }
+  });
+  connectRemoteShadowUrlBtn?.addEventListener('click', () => connectRemoteShadowUrl({ silent: false }));
   importRemoteShadowBtn?.addEventListener('click', promptRemoteShadowImport);
   clearRemoteShadowBtn?.addEventListener('click', clearRemoteShadowSource);
   recheckRemoteShadowBtn?.addEventListener('click', () => {
+    if (remoteShadowConfig?.url) {
+      connectRemoteShadowUrl({ silent: false });
+      return;
+    }
     updateRemoteShadowUI();
     const comparison = computeRemoteShadowComparison();
     showToast(`Comparació remota actual: ${comparison.label}`);
