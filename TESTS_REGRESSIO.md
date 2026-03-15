@@ -11,11 +11,13 @@ Aquest paquet comprova els fluxos critics de Sutsumu amb Playwright sobre servid
 - Workspace portable (desar i reobrir)
 - Exportacio i importacio JSON
 - Backup intern manual i historial
+- Backup extern automatic amb fitxer connectat
+- Recuperacio des del mirall de supervivencia si es perd IndexedDB
 
 ## Com executar-los
 
 ```bash
-cd /Users/sergicastillo/Desktop/mibento.com
+cd /Users/sergicastillo/Downloads/Sutsumu\ Backups/sutsumu_v1_0_0_estable_work
 npm install
 npm run test:regression
 ```

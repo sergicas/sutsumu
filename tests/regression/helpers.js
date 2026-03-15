@@ -36,10 +36,55 @@ async function openDocumentFromTree(page, title) {
   await expect(page.locator('#editName')).toHaveValue(title);
 }
 
+async function installExternalBackupStub(page, options = {}) {
+  const { permission = 'granted', name = 'sutsumu-backup-test.json' } = options;
+  await page.addInitScript(({ permissionState, fileName }) => {
+    const storedWrites = JSON.parse(localStorage.getItem('__sutsumuExternalBackupWrites') || '[]');
+    window.__sutsumuExternalBackupWrites = Array.isArray(storedWrites) ? storedWrites : [];
+    window.__sutsumuExternalBackupLastWrite = localStorage.getItem('__sutsumuExternalBackupLastWrite') || '';
+    window.__sutsumuExternalBackupPermission = permissionState;
+    window.showSaveFilePicker = async () => ({
+      kind: 'file',
+      name: fileName,
+      __sutsumuSkipPersist: true,
+      async queryPermission() {
+        return window.__sutsumuExternalBackupPermission;
+      },
+      async requestPermission() {
+        window.__sutsumuExternalBackupPermission = 'granted';
+        return 'granted';
+      },
+      async createWritable() {
+        let buffer = '';
+        return {
+          async write(chunk) {
+            if (typeof chunk === 'string') {
+              buffer += chunk;
+              return;
+            }
+            if (chunk && typeof chunk.data === 'string') {
+              buffer += chunk.data;
+              return;
+            }
+            buffer += String(chunk ?? '');
+          },
+          async close() {
+            window.__sutsumuExternalBackupLastWrite = buffer;
+            window.__sutsumuExternalBackupWrites.push(buffer);
+            localStorage.setItem('__sutsumuExternalBackupLastWrite', buffer);
+            localStorage.setItem('__sutsumuExternalBackupWrites', JSON.stringify(window.__sutsumuExternalBackupWrites));
+          }
+        };
+      }
+    });
+  }, { permissionState: permission, fileName: name });
+}
+
 module.exports = {
   gotoApp,
   expectToast,
   fillEditor,
   createDocument,
-  openDocumentFromTree
+  openDocumentFromTree,
+  installExternalBackupStub
 };

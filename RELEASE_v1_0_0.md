@@ -26,7 +26,7 @@ La sincronitzacio automatica entre dispositius encara no esta implementada.
 Executa:
 
 ```bash
-cd "/Users/sergicastillo/Downloads/Sutsumu Backups/sutsumu_v1_0_final_app"
+cd "/Users/sergicastillo/Downloads/Sutsumu Backups/sutsumu_v1_0_0_estable_work"
 npm run test:regression
 ```
 
@@ -35,3 +35,5 @@ npm run test:regression
 - mirall local de supervivència guardat també a localStorage
 - pàgina independent de recuperació a `recovery.html`
 - recuperació automàtica si l'app arrenca buida després d'una fallada d'IndexedDB
+- backup extern automàtic a un fitxer JSON connectat quan el navegador permet accés directe al disc
+- protecció per no sobreescriure la còpia externa amb un estat buit

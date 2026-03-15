@@ -218,6 +218,23 @@
                   <button id="backupHistoryBtn" type="button" class="btn btn-secondary btn-small">Historial backups</button>
                   <a href="recovery.html" class="btn btn-secondary btn-small backup-recovery-link">Recuperació d'emergència</a>
                 </div>
+                <div class="backup-external-card">
+                  <div class="backup-automation-header">
+                    <div>
+                      <div class="backup-automation-label">Backup extern automàtic</div>
+                      <p id="externalBackupStatusText" class="backup-automation-text">Encara no hi ha cap fitxer extern connectat.</p>
+                    </div>
+                    <span id="externalBackupBadge" class="badge backup-count-badge">Off</span>
+                  </div>
+                  <div class="backup-automation-actions">
+                    <button id="connectExternalBackupBtn" type="button" class="btn btn-secondary btn-small">Connectar fitxer</button>
+                    <button id="saveExternalBackupBtn" type="button" class="btn btn-secondary btn-small" disabled>Desar còpia ara</button>
+                    <button id="disconnectExternalBackupBtn" type="button" class="btn btn-danger-ghost btn-small" disabled>Desconnectar</button>
+                  </div>
+                  <div id="externalBackupHint" class="backup-external-hint">
+                    En Chrome o navegadors compatibles d'escriptori, Sutsumu pot reescriure automàticament una còpia JSON fora del navegador després de cada canvi estable.
+                  </div>
+                </div>
               </div>
               <div class="workspace-card">
                 <div class="workspace-header">
@@ -258,7 +275,7 @@
                   <span class="badge quickstart-badge">v1.0.0</span>
                 </div>
                 <ol class="quickstart-list">
-                  <li><strong>Desa un workspace</strong> si vols una còpia portable fora del navegador.</li>
+                  <li><strong>Connecta un backup extern o desa un workspace</strong> si vols una còpia fora del navegador.</li>
                   <li><strong>Força un backup intern</strong> abans de canvis grans o neteges importants.</li>
                   <li><strong>Prepara el mode offline</strong> i instal·la Sutsumu com a app quan el navegador ho permeti.</li>
                 </ol>

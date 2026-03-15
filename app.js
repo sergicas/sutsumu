@@ -34,6 +34,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const backupHistoryBtn = document.getElementById('backupHistoryBtn');
   const backupStatusTextEl = document.getElementById('backupStatusText');
   const backupCountBadgeEl = document.getElementById('backupCountBadge');
+  const externalBackupStatusTextEl = document.getElementById('externalBackupStatusText');
+  const externalBackupBadgeEl = document.getElementById('externalBackupBadge');
+  const connectExternalBackupBtn = document.getElementById('connectExternalBackupBtn');
+  const saveExternalBackupBtn = document.getElementById('saveExternalBackupBtn');
+  const disconnectExternalBackupBtn = document.getElementById('disconnectExternalBackupBtn');
+  const externalBackupHintEl = document.getElementById('externalBackupHint');
   const workspaceStatusTextEl = document.getElementById('workspaceStatusText');
   const workspaceModeBadgeEl = document.getElementById('workspaceModeBadge');
   const createWorkspaceBtn = document.getElementById('createWorkspaceBtn');
@@ -205,6 +211,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const RECOVERY_VAULT_MAX_AGE_DAYS = 14;
   const DISMISSED_RECOVERY_VAULT_SESSION_KEY = 'bento_recovery_vault_dismissed';
   const DISMISSED_LIGHT_RECOVERY_SESSION_KEY = 'bento_light_recovery_dismissed';
+  const EXTERNAL_BACKUP_META_KEY = 'sutsumu_external_backup_meta_v1';
+  const EXTERNAL_BACKUP_HANDLE_KEY = 'sutsumu_external_backup_handle_v1';
+  const EXTERNAL_BACKUP_META_MIRROR_KEY = 'sutsumu_external_backup_meta_local_v1';
+  const EXTERNAL_BACKUP_DEBOUNCE_MS = 3500;
   const WORKSPACE_SCHEMA = 'bento-workspace';
   const WORKSPACE_VERSION = 1;
   const WORKSPACE_META_KEY = 'bento_workspace_meta_v1';
@@ -251,6 +261,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   let fullBackupHistoryCache = [];
   let hasShownStorageFallbackToast = false;
   let confirmOnCancel = null;
+  let externalBackupHandle = null;
+  let externalBackupMeta = null;
+  let externalBackupAutosaveTimer = null;
+  let externalBackupLastSavedSignature = '';
+  let externalBackupDirty = false;
+  let externalBackupNeedsPermission = false;
+  let isExternalBackupSaving = false;
   let workspaceAutosaveTimer = null;
   let isWorkspaceSaving = false;
   let workspaceLastSavedSignature = '';
@@ -638,6 +655,35 @@ async function applyPendingAppUpdate() {
 
   function supportsWorkspaceFiles() {
     return Boolean(window.isSecureContext && typeof window.showOpenFilePicker === 'function' && typeof window.showSaveFilePicker === 'function');
+  }
+
+  function supportsExternalBackupFiles() {
+    return Boolean(window.isSecureContext && typeof window.showSaveFilePicker === 'function');
+  }
+
+  function canPersistFileHandle(handle) {
+    return Boolean(handle && !handle.__sutsumuSkipPersist);
+  }
+
+  function hasExternalBackupSession() {
+    return Boolean(externalBackupHandle || externalBackupMeta);
+  }
+
+  function isExternalBackupConnected() {
+    return Boolean(externalBackupHandle);
+  }
+
+  function getExternalBackupDisplayName() {
+    if (externalBackupHandle?.name) return externalBackupHandle.name;
+    if (externalBackupMeta?.name) return externalBackupMeta.name;
+    return 'sense còpia externa';
+  }
+
+  function getExternalBackupSuggestedFilename() {
+    const baseName = getWorkspaceDisplayName() !== 'Sense workspace'
+      ? getWorkspaceDisplayName()
+      : (docs.find(item => item.type === 'folder' && !item.isDeleted)?.title || 'sutsumu');
+    return `${slugifyFileName(baseName)}-backup-automatic.json`;
   }
 
   function isPortableWorkspaceMode() {
@@ -1791,6 +1837,353 @@ async function applyPendingAppUpdate() {
       ? (docs.find(item => item.type === 'folder' && !item.isDeleted)?.title || 'sutsumu-workspace')
       : getWorkspaceDisplayName());
     return `${base}${WORKSPACE_FILE_EXTENSION}`;
+  }
+
+  function normalizeExternalBackupMeta(rawMeta) {
+    if (!rawMeta || typeof rawMeta !== 'object') return null;
+    const stats = rawMeta.stats && typeof rawMeta.stats === 'object'
+      ? {
+          folders: Number(rawMeta.stats.folders || 0),
+          documents: Number(rawMeta.stats.documents || 0),
+          attachments: Number(rawMeta.stats.attachments || 0),
+          deleted: Number(rawMeta.stats.deleted || 0),
+          versions: Number(rawMeta.stats.versions || 0)
+        }
+      : null;
+    return {
+      name: typeof rawMeta.name === 'string' && rawMeta.name.trim() ? rawMeta.name.trim() : getExternalBackupSuggestedFilename(),
+      lastSavedAt: typeof rawMeta.lastSavedAt === 'string' && !Number.isNaN(Date.parse(rawMeta.lastSavedAt)) ? rawMeta.lastSavedAt : '',
+      signature: typeof rawMeta.signature === 'string' ? rawMeta.signature : '',
+      stats
+    };
+  }
+
+  function updateExternalBackupUI() {
+    if (!externalBackupStatusTextEl || !externalBackupBadgeEl || !connectExternalBackupBtn || !saveExternalBackupBtn || !disconnectExternalBackupBtn) return;
+
+    const fsSupported = supportsExternalBackupFiles();
+    const hasData = docs.length > 0;
+    connectExternalBackupBtn.disabled = isExternalBackupSaving || !fsSupported;
+    saveExternalBackupBtn.disabled = isExternalBackupSaving || !isExternalBackupConnected() || !hasData;
+    disconnectExternalBackupBtn.disabled = isExternalBackupSaving || !hasExternalBackupSession();
+    connectExternalBackupBtn.textContent = isExternalBackupConnected()
+      ? 'Canviar fitxer'
+      : (externalBackupMeta ? 'Reconnectar fitxer' : 'Connectar fitxer');
+
+    if (externalBackupHintEl) {
+      externalBackupHintEl.textContent = fsSupported
+        ? "Quan el fitxer estigui connectat, Sutsumu hi desarà automàticament una còpia JSON completa després de cada canvi estable. Per seguretat, mai no sobreescriurà la còpia externa amb un estat buit."
+        : "Aquest navegador no permet reescriure automàticament un fitxer extern. Aquí continua sent més segur usar Exportar dades o un workspace desat fora del navegador.";
+    }
+
+    if (!fsSupported) {
+      externalBackupBadgeEl.textContent = 'Manual';
+      externalBackupStatusTextEl.textContent = 'Backup extern automàtic no disponible en aquest navegador. Mantén una còpia amb Exportar dades o workspace.';
+      return;
+    }
+
+    if (isExternalBackupSaving) {
+      externalBackupBadgeEl.textContent = 'Desant';
+      externalBackupStatusTextEl.textContent = `Desant còpia externa a ${getExternalBackupDisplayName()}...`;
+      return;
+    }
+
+    if (externalBackupNeedsPermission && isExternalBackupConnected()) {
+      externalBackupBadgeEl.textContent = 'Permís';
+      externalBackupStatusTextEl.textContent = `Hi ha canvis pendents per a ${getExternalBackupDisplayName()}, però el navegador necessita un gest teu per tornar a escriure al fitxer. Prem “Desar còpia ara”.`;
+      return;
+    }
+
+    if (isExternalBackupConnected()) {
+      externalBackupBadgeEl.textContent = externalBackupDirty ? 'Pendent' : 'Actiu';
+      if (externalBackupDirty) {
+        externalBackupStatusTextEl.textContent = `Backup extern connectat: ${getExternalBackupDisplayName()}. Hi ha canvis pendents d'escriure fora del navegador.`;
+      } else if (externalBackupMeta?.stats) {
+        externalBackupStatusTextEl.textContent = `Backup extern actiu: ${getExternalBackupDisplayName()}. Última còpia: ${formatWorkspaceSavedAt(externalBackupMeta.lastSavedAt)} · ${externalBackupMeta.stats.folders} carpetes i ${externalBackupMeta.stats.documents} documents.`;
+      } else {
+        externalBackupStatusTextEl.textContent = `Backup extern actiu: ${getExternalBackupDisplayName()}. Última còpia: ${formatWorkspaceSavedAt(externalBackupMeta?.lastSavedAt || '')}.`;
+      }
+      return;
+    }
+
+    if (externalBackupMeta) {
+      externalBackupBadgeEl.textContent = 'Recordat';
+      externalBackupStatusTextEl.textContent = `Backup extern recordat: ${getExternalBackupDisplayName()}. Torna a connectar aquest fitxer per reactivar l'automatisme.`;
+      return;
+    }
+
+    externalBackupBadgeEl.textContent = 'Off';
+    externalBackupStatusTextEl.textContent = hasData
+      ? 'Encara no hi ha cap fitxer de backup extern connectat. Connecta un JSON extern perquè Sutsumu hi vagi desant còpies automàtiques.'
+      : 'Connecta un fitxer de backup extern i Sutsumu hi començarà a desar còpies quan hi hagi dades.';
+  }
+
+  async function persistExternalBackupBinding() {
+    try {
+      if (externalBackupMeta) {
+        localStorage.setItem(EXTERNAL_BACKUP_META_MIRROR_KEY, JSON.stringify(externalBackupMeta));
+      } else {
+        localStorage.removeItem(EXTERNAL_BACKUP_META_MIRROR_KEY);
+      }
+    } catch (err) {
+      console.warn("No s'ha pogut actualitzar el recordatori local del backup extern.", err);
+    }
+
+    if (!getMainStore()) return;
+    try {
+      if (externalBackupMeta) {
+        await getMainStore().setItem(EXTERNAL_BACKUP_META_KEY, externalBackupMeta);
+      } else {
+        await getMainStore().removeItem(EXTERNAL_BACKUP_META_KEY);
+      }
+
+      if (externalBackupHandle && canPersistFileHandle(externalBackupHandle)) {
+        await getMainStore().setItem(EXTERNAL_BACKUP_HANDLE_KEY, externalBackupHandle);
+      } else {
+        await getMainStore().removeItem(EXTERNAL_BACKUP_HANDLE_KEY);
+      }
+    } catch (err) {
+      console.warn("No s'ha pogut persistir la vinculació del backup extern.", err);
+    }
+  }
+
+  async function bindExternalBackupHandle(handle, meta = {}) {
+    externalBackupHandle = handle || null;
+    externalBackupMeta = handle
+      ? normalizeExternalBackupMeta({
+          name: handle.name || meta.name || getExternalBackupSuggestedFilename(),
+          lastSavedAt: meta.lastSavedAt || '',
+          signature: meta.signature || '',
+          stats: meta.stats || null
+        })
+      : null;
+    externalBackupLastSavedSignature = meta.signature || '';
+    externalBackupDirty = false;
+    externalBackupNeedsPermission = false;
+    await persistExternalBackupBinding();
+    updateExternalBackupUI();
+  }
+
+  async function clearExternalBackupBinding(options = {}) {
+    const { forgetMeta = true } = options;
+    if (externalBackupAutosaveTimer) {
+      clearTimeout(externalBackupAutosaveTimer);
+      externalBackupAutosaveTimer = null;
+    }
+    externalBackupHandle = null;
+    externalBackupLastSavedSignature = '';
+    externalBackupDirty = false;
+    externalBackupNeedsPermission = false;
+    if (forgetMeta) {
+      externalBackupMeta = null;
+    }
+    await persistExternalBackupBinding();
+    updateExternalBackupUI();
+  }
+
+  async function restorePersistedExternalBackupBinding() {
+    const mirroredMeta = normalizeExternalBackupMeta(safeJSONParse(localStorage.getItem(EXTERNAL_BACKUP_META_MIRROR_KEY), null));
+    if (!getMainStore()) {
+      externalBackupMeta = mirroredMeta;
+      externalBackupHandle = null;
+      externalBackupLastSavedSignature = mirroredMeta?.signature || '';
+      externalBackupDirty = false;
+      externalBackupNeedsPermission = false;
+      updateExternalBackupUI();
+      return;
+    }
+
+    try {
+      const savedMeta = normalizeExternalBackupMeta(await getMainStore().getItem(EXTERNAL_BACKUP_META_KEY));
+      const savedHandle = await getMainStore().getItem(EXTERNAL_BACKUP_HANDLE_KEY);
+      externalBackupMeta = savedMeta || mirroredMeta;
+      externalBackupLastSavedSignature = externalBackupMeta?.signature || '';
+      externalBackupHandle = savedHandle && savedHandle.kind === 'file' ? savedHandle : null;
+    } catch (err) {
+      console.warn("No s'ha pogut restaurar la vinculació del backup extern.", err);
+      externalBackupHandle = null;
+      externalBackupMeta = mirroredMeta;
+      externalBackupLastSavedSignature = mirroredMeta?.signature || '';
+    }
+
+    externalBackupDirty = false;
+    externalBackupNeedsPermission = false;
+    updateExternalBackupUI();
+  }
+
+  async function ensureExternalBackupPermission(interactive = false) {
+    if (!externalBackupHandle) return false;
+    try {
+      if (typeof externalBackupHandle.queryPermission === 'function') {
+        const current = await externalBackupHandle.queryPermission({ mode: 'readwrite' });
+        if (current === 'granted') {
+          externalBackupNeedsPermission = false;
+          return true;
+        }
+        if (interactive && typeof externalBackupHandle.requestPermission === 'function') {
+          const requested = await externalBackupHandle.requestPermission({ mode: 'readwrite' });
+          externalBackupNeedsPermission = requested !== 'granted';
+          return requested === 'granted';
+        }
+        externalBackupNeedsPermission = true;
+        return false;
+      }
+
+      externalBackupNeedsPermission = false;
+      return true;
+    } catch (err) {
+      console.warn("No s'ha pogut comprovar el permís del backup extern.", err);
+      externalBackupNeedsPermission = true;
+      return false;
+    } finally {
+      updateExternalBackupUI();
+    }
+  }
+
+  async function saveExternalBackupToHandle(reason = 'external-auto-backup', options = {}) {
+    const { silent = false, force = false, interactive = false } = options;
+    if (isExternalBackupSaving) return false;
+    if (!externalBackupHandle) {
+      if (!silent) showToast('Connecta primer un fitxer per al backup extern.', 'info');
+      updateExternalBackupUI();
+      return false;
+    }
+
+    if (docs.length === 0) {
+      externalBackupDirty = false;
+      updateExternalBackupUI();
+      if (!silent) {
+        showToast("No sobreescriuré la còpia externa amb un estat buit. L'última còpia bona es manté intacta.", 'info');
+      }
+      return false;
+    }
+
+    const signature = createBackupStateSignature(docs, expandedFolders);
+    if (!force && signature === externalBackupLastSavedSignature && !externalBackupDirty) {
+      if (!silent) showToast('La còpia externa ja està al dia.', 'info');
+      updateExternalBackupUI();
+      return true;
+    }
+
+    const hasPermission = await ensureExternalBackupPermission(interactive);
+    if (!hasPermission) {
+      externalBackupDirty = true;
+      if (!silent) {
+        showToast(
+          interactive
+            ? "Sutsumu no té permís per escriure en aquest fitxer extern."
+            : "Hi ha una còpia externa pendent. Prem “Desar còpia ara” per reactivar el permís del fitxer.",
+          interactive ? 'error' : 'info'
+        );
+      }
+      updateExternalBackupUI();
+      return false;
+    }
+
+    isExternalBackupSaving = true;
+    updateExternalBackupUI();
+    try {
+      const payload = await createFullBackupPayload(reason);
+      const writable = await externalBackupHandle.createWritable();
+      await writable.write(JSON.stringify(payload, null, 2));
+      await writable.close();
+      externalBackupMeta = normalizeExternalBackupMeta({
+        name: externalBackupHandle?.name || getExternalBackupSuggestedFilename(),
+        lastSavedAt: new Date().toISOString(),
+        signature,
+        stats: createBackupStats(payload)
+      });
+      externalBackupLastSavedSignature = signature;
+      externalBackupDirty = false;
+      externalBackupNeedsPermission = false;
+      await persistExternalBackupBinding();
+      if (!silent) showToast(`Còpia externa desada: ${getExternalBackupDisplayName()}`);
+      return true;
+    } catch (err) {
+      console.warn("No s'ha pogut desar la còpia externa automàtica.", err);
+      externalBackupDirty = true;
+      if (!silent) {
+        showToast(
+          err?.name === 'NotAllowedError'
+            ? "Sutsumu no té permís per escriure en aquest fitxer extern."
+            : "No s'ha pogut desar la còpia externa.",
+          'error'
+        );
+      }
+      return false;
+    } finally {
+      isExternalBackupSaving = false;
+      updateExternalBackupUI();
+    }
+  }
+
+  function queueExternalBackupAutosave(reason = 'auto-save') {
+    if (!hasExternalBackupSession()) {
+      updateExternalBackupUI();
+      return;
+    }
+
+    if (docs.length === 0) {
+      externalBackupDirty = false;
+      if (externalBackupAutosaveTimer) {
+        clearTimeout(externalBackupAutosaveTimer);
+        externalBackupAutosaveTimer = null;
+      }
+      updateExternalBackupUI();
+      return;
+    }
+
+    externalBackupDirty = true;
+    updateExternalBackupUI();
+
+    if (!isExternalBackupConnected()) return;
+
+    if (externalBackupAutosaveTimer) clearTimeout(externalBackupAutosaveTimer);
+    externalBackupAutosaveTimer = setTimeout(async () => {
+      externalBackupAutosaveTimer = null;
+      await saveExternalBackupToHandle(`external-${reason}`, { silent: true, force: false, interactive: false });
+    }, EXTERNAL_BACKUP_DEBOUNCE_MS);
+  }
+
+  async function connectExternalBackupFile() {
+    if (!supportsExternalBackupFiles()) {
+      showToast("Aquest navegador no permet backups externs automàtics. Fes servir Exportar dades o un workspace.", 'info');
+      return false;
+    }
+
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: getExternalBackupSuggestedFilename(),
+        types: [
+          {
+            description: 'Backup extern de Sutsumu',
+            accept: { 'application/json': ['.json'] }
+          }
+        ]
+      });
+      await bindExternalBackupHandle(handle, { name: handle.name });
+      if (docs.length > 0) {
+        await saveExternalBackupToHandle('external-manual-backup', { silent: false, force: true, interactive: true });
+      } else {
+        showToast('Fitxer de backup extern connectat. Quan hi hagi dades, Sutsumu hi començarà a desar còpies automàtiques.');
+      }
+      return true;
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        showToast('Connexió del backup extern cancel·lada.', 'info');
+        return false;
+      }
+      console.warn("No s'ha pogut connectar el fitxer de backup extern.", err);
+      showToast("No s'ha pogut connectar el fitxer de backup extern.", 'error');
+      return false;
+    }
+  }
+
+  async function disconnectExternalBackup() {
+    if (!hasExternalBackupSession()) return;
+    const label = getExternalBackupDisplayName();
+    await clearExternalBackupBinding({ forgetMeta: true });
+    showToast(`Backup extern desconnectat: ${label}`, 'info');
   }
 
   function updateWorkspaceUI() {
@@ -4042,6 +4435,8 @@ async function applyPendingAppUpdate() {
       'empty-trash': 'Paperera buidada',
       'recovery-vault-restore': 'Recuperació de la volta crítica',
       'light-recovery-restore': 'Recuperació de còpia local',
+      'external-auto-backup': 'Backup extern automàtic',
+      'external-manual-backup': 'Backup extern manual',
       'restore-full-history': "Restauració d'un backup intern"
     };
     return labels[reason] || `Canvi desat (${reason})`;
@@ -4809,6 +5204,8 @@ async function applyPendingAppUpdate() {
   recentDocs = readRecentDocsHistory();
   renderRecentDocsHistory();
   updateBackupStatusUI();
+  updateExternalBackupUI();
+  await restorePersistedExternalBackupBinding();
   await restorePersistedWorkspaceBinding();
   await registerPwaSupport();
   updateQuickStartUI();
@@ -4869,6 +5266,9 @@ async function applyPendingAppUpdate() {
   restoreSelectedBackupBtn.addEventListener('click', restoreSelectedFullBackup);
   deleteSelectedBackupBtn.addEventListener('click', deleteSelectedFullBackup);
   backupHistoryBtn.addEventListener('click', openBackupHistoryDialog);
+  connectExternalBackupBtn?.addEventListener('click', connectExternalBackupFile);
+  saveExternalBackupBtn?.addEventListener('click', () => saveExternalBackupToHandle('external-manual-backup', { silent: false, force: true, interactive: true }));
+  disconnectExternalBackupBtn?.addEventListener('click', disconnectExternalBackup);
   createWorkspaceBtn.addEventListener('click', () => createNewWorkspaceFile());
   openWorkspaceBtn.addEventListener('click', openExistingWorkspaceFile);
   saveWorkspaceBtn.addEventListener('click', saveWorkspace);
@@ -4936,6 +5336,7 @@ async function applyPendingAppUpdate() {
     try {
       const backup = await saveFullBackupSnapshot('manual-full-backup', { auto: false, force: true });
       if (backup) {
+        queueExternalBackupAutosave('manual-full-backup');
         showToast('Backup intern complet desat correctament.');
       } else {
         showToast("No hi ha dades suficients per crear un backup intern complet.", 'info');
@@ -5218,10 +5619,12 @@ async function applyPendingAppUpdate() {
     await saveLightBackupSnapshot(reason);
     updateTargetSelects();
     queueAutomaticFullBackup(reason);
+    queueExternalBackupAutosave(reason);
     if (reason !== 'workspace-open') {
       queueWorkspaceAutosave(reason);
     }
     updateBackupStatusUI();
+    updateExternalBackupUI();
     updateWorkspaceUI();
   }
 

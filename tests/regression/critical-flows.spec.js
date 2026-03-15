@@ -4,14 +4,12 @@ const {
   expectToast,
   fillEditor,
   createDocument,
-  openDocumentFromTree
+  openDocumentFromTree,
+  installExternalBackupStub
 } = require('./helpers');
 
-test.beforeEach(async ({ page }) => {
-  await gotoApp(page);
-});
-
 test('creates, edits and reopens a document without losing content', async ({ page }) => {
+  await gotoApp(page);
   const title = 'Regressio Document Principal';
   const initialContent = 'Text inicial de prova';
   const updatedContent = 'Text actualitzat de prova per validar la persistencia';
@@ -32,6 +30,7 @@ test('creates, edits and reopens a document without losing content', async ({ pa
 });
 
 test('supports tags, quick filters and command palette navigation', async ({ page }) => {
+  await gotoApp(page);
   const targetTitle = 'Regressio Etiquetes';
   const otherTitle = 'Regressio Secundari';
 
@@ -67,7 +66,46 @@ test('supports tags, quick filters and command palette navigation', async ({ pag
   await expect(page.locator('#editName')).toHaveValue(targetTitle);
 });
 
+test('writes an automatic external backup and keeps the last good copy if the app becomes empty', async ({ page }) => {
+  await installExternalBackupStub(page);
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio Backup Extern',
+    content: 'Contingut que ha d acabar fora del navegador',
+    tags: 'external, backup'
+  });
+
+  await page.locator('#connectExternalBackupBtn').click();
+  await expectToast(page, 'Còpia externa desada');
+  await expect(page.locator('#externalBackupStatusText')).toContainText('Backup extern actiu');
+
+  const firstBackup = await page.evaluate(() => window.__sutsumuExternalBackupLastWrite);
+  expect(firstBackup).toContain('Regressio Backup Extern');
+
+  await page.evaluate(async () => {
+    const deleteDb = (name) => new Promise(resolve => {
+      const request = indexedDB.deleteDatabase(name);
+      request.onsuccess = () => resolve(true);
+      request.onerror = () => resolve(true);
+      request.onblocked = () => resolve(true);
+    });
+    await deleteDb('BentoApp');
+    localStorage.removeItem('bento_simple_docs');
+    localStorage.removeItem('bento_expanded_folders');
+  });
+
+  await page.reload();
+  await expect(page.locator('#confirmTitle')).toContainText('Recuperar la còpia local de supervivència?');
+  await page.locator('#confirmCancelBtn').click();
+  await expect(page.locator('#externalBackupStatusText')).toContainText('Backup extern recordat');
+
+  const writes = await page.evaluate(() => window.__sutsumuExternalBackupWrites.length);
+  expect(writes).toBe(1);
+});
+
 test('exports and reopens a portable workspace', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
   const title = 'Regressio Workspace';
   await createDocument(page, {
     title,
@@ -91,6 +129,7 @@ test('exports and reopens a portable workspace', async ({ page, browser }, testI
 });
 
 test('exports data and restores it through JSON import', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
   const title = 'Regressio Export Import';
   const content = 'Aquest document ha de sobreviure a exportacio i importacio';
   await createDocument(page, {
@@ -119,6 +158,7 @@ test('exports data and restores it through JSON import', async ({ page, browser 
 });
 
 test('creates and lists a manual internal backup', async ({ page }) => {
+  await gotoApp(page);
   await createDocument(page, {
     title: 'Regressio Backup Intern',
     content: 'Dades per al backup intern',
@@ -136,6 +176,7 @@ test('creates and lists a manual internal backup', async ({ page }) => {
 
 
 test('restores a previous document version from history', async ({ page }) => {
+  await gotoApp(page);
   const title = 'Regressio Versions';
   const v1 = 'Primera versio del document';
   const v2 = 'Segona versio recuperable';
@@ -173,6 +214,7 @@ test('restores a previous document version from history', async ({ page }) => {
 });
 
 test('moves a document to trash and restores it', async ({ page }) => {
+  await gotoApp(page);
   const title = 'Regressio Paperera';
 
   await createDocument(page, {
@@ -199,6 +241,7 @@ test('moves a document to trash and restores it', async ({ page }) => {
 
 
 test('recovers documents from the survival mirror if IndexedDB is lost', async ({ page }) => {
+  await gotoApp(page);
   const title = 'Regressio Supervivencia';
   await createDocument(page, {
     title,
