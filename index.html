@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ca">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sutsumu - Gestor de Documents i Carpetes</title>
+  <meta name="theme-color" content="#0ea5e9" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Sutsumu" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a href="index.html" class="topbar-brand" style="text-decoration: none; display: flex; align-items: center;">
+        <!-- Nou Logo Sutsumu 3D -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" style="margin-right: 10px;">
+          <defs>
+            <linearGradient id="bentoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0ea5e9" />
+              <stop offset="100%" stop-color="#8b5cf6" />
+            </linearGradient>
+            <linearGradient id="bentoGradientDark" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0284c7" />
+              <stop offset="100%" stop-color="#6d28d9" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"
+            fill="url(#bentoGradient)" fill-opacity="0.15" stroke="url(#bentoGradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          </path>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96" stroke="url(#bentoGradientDark)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          <line x1="12" y1="22.08" x2="12" y2="12" stroke="url(#bentoGradientDark)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></line>
+        </svg>
+        <h1 style="background: linear-gradient(90deg, #0ea5e9, #8b5cf6); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin: 0;">Sutsumu</h1>
+      </a>
+      <p class="topbar-subtitle">El teu espai organitzat: documents i carpetes il·limitades</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="layout">
+      <!-- Columna esquerra: panell de control -->
+      <div class="column column-left">
+        <div class="card add-card">
+          <div class="tabs-header">
+            <button class="tab-btn active" data-target="tab-document">📑 Nou Document</button>
+            <button class="tab-btn" data-target="tab-folder">📁 Nova Carpeta</button>
+          </div>
+
+          <div class="card-body">
+            <!-- Form Document -->
+            <div id="tab-document" class="tab-content active">
+              <p class="card-description">Afegeix un fitxer o document a l'espai de treball.</p>
+              <div class="form">
+                <div class="input-group">
+                  <label class="form-label" for="docUpload" style="cursor: pointer;">Tipus de document i Pujada</label>
+                  <div style="display: flex; gap: 8px;">
+                    <label for="docUpload" class="btn btn-secondary btn-flex"
+                      style="text-align: center; justify-content: center; width: 100%; border: 1px dashed #cbd5e1;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                      </svg>
+                      Pujar Fitxer (PDF, Imatge, Word .docx...)
+                    </label>
+                    <input id="docUpload" type="file" accept="*/*" style="display:none;" />
+                  </div>
+                </div>
+                <div class="input-group">
+                  <label class="form-label" for="docName">Nom</label>
+                  <input id="docName" type="text" placeholder="Nom del document" autocomplete="off" />
+                </div>
+                <div class="input-group">
+                  <label class="form-label" for="docContent">Contingut del text (Opcional)</label>
+                  <div class="editor-toolbar">
+                    <button type="button" class="toolbar-btn" data-command="bold" title="Negreta"><b>B</b></button>
+                    <button type="button" class="toolbar-btn" data-command="italic" title="Cursiva"><i>I</i></button>
+                    <button type="button" class="toolbar-btn" data-command="undo" title="Desfer"><span aria-hidden="true">↶</span></button>
+                    <button type="button" class="toolbar-btn" data-command="redo" title="Refer"><span aria-hidden="true">↷</span></button>
+                    <button type="button" class="toolbar-btn toolbar-btn-wide" data-command="formatBlock" data-value="H1" title="Títol principal">H1</button>
+                    <button type="button" class="toolbar-btn toolbar-btn-wide" data-command="formatBlock" data-value="H2" title="Subtítol">H2</button>
+                    <button type="button" class="toolbar-btn" data-command="insertUnorderedList"
+                      title="Llista">≡</button>
+                  </div>
+                  <div id="docContent" class="custom-richtext" contenteditable="true"
+                    data-placeholder="Escriu una nota ràpida aquí..."></div>
+                </div>
+                <div class="input-group">
+                  <label class="form-label" for="docCategory">Categoria</label>
+                  <select id="docCategory" class="custom-select">
+                    <option value="">Sense categoria</option>
+                    <option value="Personal">👤 Personal</option>
+                    <option value="Feina">💼 Feina</option>
+                    <option value="Finances">💰 Finances / Bancs</option>
+                    <option value="Salut">🏥 Salut / Metges</option>
+                    <option value="Legal">⚖️ Legal / Contractes</option>
+                    <option value="Estudis">🎓 Estudis / Formació</option>
+                    <option value="Vehicles">🚗 Vehicles</option>
+                    <option value="Llar">🏠 Llar / Factures</option>
+                    <option value="Viatges">✈️ Viatges</option>
+                    <option value="Esbarjo">🎮 Esbarjo / Hobbies</option>
+                    <option value="Projectes">🚀 Projectes propis</option>
+                    <option value="Diversos">📦 Diversos</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label class="form-label" for="docTags">Etiquetes (Opcional)</label>
+                  <input id="docTags" type="text" placeholder="ex: urgent, client, idea" autocomplete="off" />
+                  <div class="form-help">Separa-les amb comes. Sutsumu les convertirà en filtres ràpids i les guardarà als backups i workspaces.</div>
+                </div>
+                <div class="input-group">
+                  <label class="form-label" for="docTargetFolder">Desar a (Destí)</label>
+                  <select id="docTargetFolder" class="custom-select tree-target-select">
+                    <option value="root">🏠 Inici (Arrel)</option>
+                    <!-- JS Injected -->
+                  </select>
+                </div>
+                <button id="addDocBtn" type="button" class="btn btn-primary btn-block">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="btn-icon">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  Crear Document
+                </button>
+              </div>
+            </div>
+
+            <!-- Form Folder -->
+            <div id="tab-folder" class="tab-content hidden">
+              <p class="card-description">Crea una nova carpeta a l'espai de treball.</p>
+              <div class="form">
+                <div class="input-group">
+                  <label class="form-label" for="folderName">Nom</label>
+                  <input id="folderName" type="text" placeholder="Nom de la carpeta" autocomplete="off" />
+                </div>
+                <div class="input-group">
+                  <label class="form-label" for="folderDesc">Descripció (Opcional)</label>
+                  <input id="folderDesc" type="text" placeholder="Petita descripció d'aquesta llibreta..."
+                    autocomplete="off" />
+                </div>
+                <div class="input-group">
+                  <label class="form-label" for="folderTags">Etiquetes (Opcional)</label>
+                  <input id="folderTags" type="text" placeholder="ex: client, projecte, lectura" autocomplete="off" />
+                  <div class="form-help">També pots etiquetar carpetes per trobar-les més ràpidament després.</div>
+                </div>
+                <div class="input-group">
+                  <label class="form-label" for="folderTargetFolder">Desar a (Destí)</label>
+                  <select id="folderTargetFolder" class="custom-select tree-target-select">
+                    <option value="root">🏠 Inici (Arrel)</option>
+                    <!-- JS Injected -->
+                  </select>
+                </div>
+                <!-- Nou Color Picker Folder -->
+                <div class="input-group">
+                  <label class="form-label" for="folderColor">Color (Opcional)</label>
+                  <div class="color-picker-group">
+                    <input type="color" id="folderColor" value="#0ea5e9" class="folder-color-input" />
+                    <span class="color-help">Personalitza el color d'aquesta llibreta</span>
+                  </div>
+                </div>
+                <button id="addFolderBtn" type="button" class="btn btn-primary btn-block">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="btn-icon">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  Crear Carpeta
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card search-card">
+          <h2>Cerca i accions globals</h2>
+          <p class="card-description">Busca a tot l'espai. Exporta/importa tota la col·lecció.</p>
+          <div class="search-section">
+            <div class="search-input-wrapper">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="search-icon">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input id="searchInput" type="text" placeholder="Cerca global a l'arbre sencer..." />
+            </div>
+            <div class="actions-group">
+              <button id="collapseAllBtn" type="button" class="btn btn-secondary btn-small"
+                title="Replegar totes les carpetes">Plegar Arbre</button>
+              <button id="expandAllBtn" type="button" class="btn btn-secondary btn-small"
+                title="Obrir totes les carpetes">Obrir Arbre</button>
+              <div style="flex-basis: 100%; height: 0;"></div>
+              <button id="exportBtn" type="button" class="btn btn-secondary">Exportar dades</button>
+              <button id="importBtn" type="button" class="btn btn-secondary">Importar JSON</button>
+              <input id="importFile" type="file" accept="application/json" style="display:none" />
+              <div class="backup-automation-card">
+                <div class="backup-automation-header">
+                  <div>
+                    <div class="backup-automation-label">Backups automàtics</div>
+                    <p id="backupStatusText" class="backup-automation-text">Inicialitzant el sistema de còpies...</p>
+                  </div>
+                  <span id="backupCountBadge" class="badge backup-count-badge">0</span>
+                </div>
+                <div class="backup-automation-actions">
+                  <button id="backupNowBtn" type="button" class="btn btn-secondary btn-small">Forçar backup intern</button>
+                  <button id="backupHistoryBtn" type="button" class="btn btn-secondary btn-small">Historial backups</button>
+                </div>
+              </div>
+              <div class="workspace-card">
+                <div class="workspace-header">
+                  <div>
+                    <div class="workspace-label">Workspace híbrid</div>
+                    <p id="workspaceStatusText" class="workspace-text">Mode local: encara no hi ha cap workspace extern connectat.</p>
+                  </div>
+                  <span id="workspaceModeBadge" class="badge workspace-badge">Local</span>
+                </div>
+                <div class="workspace-actions">
+                  <button id="createWorkspaceBtn" type="button" class="btn btn-secondary btn-small">Crear workspace</button>
+                  <button id="openWorkspaceBtn" type="button" class="btn btn-secondary btn-small">Obrir workspace</button>
+                  <button id="saveWorkspaceBtn" type="button" class="btn btn-secondary btn-small" disabled>Desar workspace</button>
+                  <button id="saveWorkspaceAsBtn" type="button" class="btn btn-secondary btn-small" disabled>Desar com...</button>
+                  <button id="closeWorkspaceBtn" type="button" class="btn btn-danger-ghost btn-small" disabled>Desconnectar</button>
+                  <input id="workspaceFileInput" type="file" accept=".bento-workspace.json,.json,application/json" hidden />
+                </div>
+                <div id="workspaceLocalHint" class="workspace-local-hint hidden">Ara mateix treballes només en local dins del navegador. Desa o exporta un workspace per tenir una còpia portable i reobrible.</div>
+                <div class="workspace-recents">
+                  <div class="workspace-recents-header">
+                    <div>
+                      <div class="workspace-recents-label">Workspaces recents</div>
+                      <p class="workspace-recents-text">Els últims espais de treball que has obert o desat des d'aquest dispositiu.</p>
+                    </div>
+                    <span id="workspaceRecentCount" class="badge workspace-badge">0</span>
+                  </div>
+                  <div id="workspaceRecentEmpty" class="workspace-recents-empty">Encara no hi ha workspaces recents guardats.</div>
+                  <ul id="workspaceRecentList" class="workspace-recents-list"></ul>
+                </div>
+              </div>
+              <div id="quickStartCard" class="quickstart-card hidden">
+                <div class="quickstart-header">
+                  <div>
+                    <div class="quickstart-label">Guia ràpida de Sutsumu</div>
+                    <p class="quickstart-text">Tres hàbits perquè Sutsumu sigui realment segur i còmode d'usar cada dia.</p>
+                  </div>
+                  <span class="badge quickstart-badge">v13</span>
+                </div>
+                <ol class="quickstart-list">
+                  <li><strong>Desa un workspace</strong> si vols una còpia portable fora del navegador.</li>
+                  <li><strong>Força un backup intern</strong> abans de canvis grans o neteges importants.</li>
+                  <li><strong>Prepara el mode offline</strong> i instal·la Sutsumu com a app quan el navegador ho permeti.</li>
+                </ol>
+                <div class="quickstart-actions">
+                  <button id="quickStartDismissBtn" type="button" class="btn btn-secondary btn-small">Ja ho sé</button>
+                  <button id="quickStartKeepBtn" type="button" class="btn btn-primary btn-small">Mantenir visible</button>
+                </div>
+              </div>
+
+              <div class="recent-docs-card">
+                <div class="workspace-recents-header">
+                  <div>
+                    <div class="workspace-recents-label">Recents de la sessió</div>
+                    <p class="workspace-recents-text">Accés ràpid als últims documents o carpetes que has obert o desat.</p>
+                  </div>
+                  <span id="recentDocsCount" class="badge workspace-badge">0</span>
+                </div>
+                <div id="recentDocsEmpty" class="workspace-recents-empty">Encara no hi ha elements recents en aquesta sessió.</div>
+                <ul id="recentDocsList" class="workspace-recents-list"></ul>
+              </div>
+              <div class="quick-access-card">
+                <div class="workspace-recents-header">
+                  <div>
+                    <div class="workspace-recents-label">Accés ràpid</div>
+                    <p class="workspace-recents-text">Fixa i marca com a favorit els elements que fas servir més. També els trobaràs a la paleta de comandes.</p>
+                  </div>
+                  <span id="quickAccessCount" class="badge workspace-badge">0</span>
+                </div>
+                <div class="quick-access-actions">
+                  <button id="openCommandPaletteBtn" type="button" class="btn btn-secondary btn-small">Paleta de comandes</button>
+                  <span class="quick-access-shortcut">⌘/Ctrl + K</span>
+                </div>
+                <div id="quickAccessEmpty" class="workspace-recents-empty">Encara no hi ha cap element fixat o favorit.</div>
+                <ul id="quickAccessList" class="workspace-recents-list"></ul>
+              </div>
+              <div class="tag-filter-card">
+                <div class="workspace-recents-header">
+                  <div>
+                    <div class="workspace-recents-label">Etiquetes i filtres</div>
+                    <p class="workspace-recents-text">Vista transversal per trobar documents i carpetes per tipus, favorits, fixats o etiqueta.</p>
+                  </div>
+                  <span id="tagFilterCount" class="badge workspace-badge">0</span>
+                </div>
+                <div class="tag-filter-quick-actions">
+                  <button type="button" class="btn btn-secondary btn-small active" data-type-filter="all">Tot</button>
+                  <button type="button" class="btn btn-secondary btn-small" data-type-filter="document">Documents</button>
+                  <button type="button" class="btn btn-secondary btn-small" data-type-filter="folder">Carpetes</button>
+                  <button type="button" class="btn btn-secondary btn-small" data-type-filter="favorite">Favorits</button>
+                  <button type="button" class="btn btn-secondary btn-small" data-type-filter="pinned">Fixats</button>
+                </div>
+                <div id="tagFilterEmpty" class="workspace-recents-empty">Encara no hi ha etiquetes creades. Afegeix-ne en documents o carpetes per activar aquesta vista.</div>
+                <div id="tagFilterList" class="tag-filter-list"></div>
+              </div>
+              <div class="pwa-card">
+                <div class="pwa-header">
+                  <div>
+                    <div class="pwa-label">App instal·lable</div>
+                    <p id="pwaStatusText" class="pwa-text">Comprovant si Sutsumu es pot instal·lar i usar millor fora de línia...</p>
+                  </div>
+                  <span id="pwaModeBadge" class="badge pwa-badge">Web</span>
+                </div>
+                <div class="pwa-actions">
+                  <button id="installAppBtn" type="button" class="btn btn-secondary btn-small hidden">Instal·lar Sutsumu</button>
+                  <button id="refreshAppBtn" type="button" class="btn btn-secondary btn-small hidden">Aplicar actualització</button>
+                  <button id="checkUpdateBtn" type="button" class="btn btn-secondary btn-small">Comprovar ara</button>
+                  <button id="prepareOfflineBtn" type="button" class="btn btn-secondary btn-small">Preparar offline</button>
+                  <button id="showGuideBtn" type="button" class="btn btn-secondary btn-small">Guia ràpida</button>
+                </div>
+                <div class="pwa-diagnostics">
+                  <div class="pwa-diagnostic-item">
+                    <span class="pwa-diagnostic-label">Connexió</span>
+                    <strong id="pwaDiagConnection" class="pwa-diagnostic-value">—</strong>
+                  </div>
+                  <div class="pwa-diagnostic-item">
+                    <span class="pwa-diagnostic-label">Cau offline</span>
+                    <strong id="pwaDiagCache" class="pwa-diagnostic-value">—</strong>
+                  </div>
+                  <div class="pwa-diagnostic-item">
+                    <span class="pwa-diagnostic-label">Instal·lació</span>
+                    <strong id="pwaDiagInstall" class="pwa-diagnostic-value">—</strong>
+                  </div>
+                  <div class="pwa-diagnostic-item">
+                    <span class="pwa-diagnostic-label">Actualitzacions</span>
+                    <strong id="pwaDiagUpdate" class="pwa-diagnostic-value">—</strong>
+                  </div>
+                </div>
+                <div id="offlineHint" class="pwa-hint hidden">Estàs fora de línia. Sutsumu continuarà funcionant amb les dades locals i els recursos que ja tingui en memòria cau.</div>
+              </div>
+              <div style="flex-basis: 100%; height: 0; margin-top: 10px;"></div>
+              <button id="trashBtn" type="button" class="btn btn-secondary btn-flex"
+                title="Veure els elements eliminats">🗑️ Paperera</button>
+              <div class="danger-zone">
+                <div class="danger-zone-label">Zona de perill</div>
+                <p class="danger-zone-desc">Les accions destructives creen primer una còpia de recuperació completa abans d'executar-se.</p>
+                <div class="danger-zone-actions">
+                  <button id="emptyTrashBtn" type="button" class="btn btn-danger-ghost hidden"
+                    title="Eliminar finalment el contingut de la paperera">Buidar Paperera</button>
+                  <button id="clearAllBtn" type="button" class="btn btn-danger-ghost"
+                    title="Esborra totes les carpetes i documents d'arrel">Buidar sistema zero</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Columna dreta: llista jeràrquica (scrollable) -->
+      <div class="column column-right">
+        <div class="card card-list">
+
+          <div class="card-list-header tree-header">
+            <div>
+              <h2 id="listTitle">Arbre d'arxius</h2>
+              <p id="listSubtitle" class="header-subtitle">Visualització en jerarquia completa.</p>
+              <button id="exitTrashBtn" class="btn btn-secondary btn-small hidden" style="margin-top: 8px;">← Tornar a la pàgina principal</button>
+            </div>
+            <span id="docCount" class="badge"></span>
+          </div>
+
+          <!-- Search Warning Text -->
+          <div id="searchActiveWarning" class="alert alert-info hidden">
+            Mode de visualització plana: cerca o filtres actius. Neteja el cercador o els filtres per tornar a la vista d'arbre normal.
+          </div>
+          <div id="listFilterBar" class="list-filter-bar hidden"></div>
+
+          <div id="emptyState" class="empty-state hidden">
+            <div class="empty-icon" id="emptyStateIcon">🌳</div>
+            <h3 id="emptyStateTitle">No hi ha res creat</h3>
+            <p id="emptyStateDesc">Utilitza el panell esquerre per començar a crear carpetes i documents a l'Arrel del
+              teu sistema.</p>
+          </div>
+
+          <ul id="list" class="doc-list tree-view"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Sistema UI Elements -->
+  <!-- Toasts -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Modals -->
+  <div id="modalOverlay" class="modal-overlay hidden">
+    <!-- Confirm Modal -->
+    <div id="confirmModal" class="modal-box hidden">
+      <div class="modal-icon warning">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </div>
+      <h3 id="confirmTitle" class="modal-title">Confirmació</h3>
+      <p id="confirmMessage" class="modal-text">N'esteu segurs?</p>
+      <div id="confirmWarningBox" class="confirm-warning hidden"></div>
+      <div id="confirmTypedWrap" class="confirm-typed hidden">
+        <label class="form-label" for="confirmTypedInput">Per confirmar, escriu exactament: <strong id="confirmTypedLabel"></strong></label>
+        <input id="confirmTypedInput" type="text" autocomplete="off" spellcheck="false" />
+        <p id="confirmTypedHelp" class="confirm-typed-help"></p>
+      </div>
+      <div class="modal-actions">
+        <button id="confirmCancelBtn" class="btn btn-secondary btn-flex">Cancel·lar</button>
+        <button id="confirmOkBtn" class="btn btn-danger btn-flex">Sí, esborrar</button>
+      </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal-box hidden">
+      <h3 id="editModalTitle" class="modal-title">Editar</h3>
+      <p class="modal-text">Canvia les propietats de l'element.</p>
+      <div class="modal-form">
+        <div class="form-group">
+          <label class="form-label" for="editName">Nom</label>
+          <input id="editName" type="text" />
+        </div>
+        <div id="editCategoryGroup" class="form-group">
+          <label class="form-label" for="editCategory">Categoria</label>
+          <select id="editCategory" class="custom-select">
+            <option value="">Sense categoria</option>
+            <option value="Personal">Personal</option>
+            <option value="Feina">Feina</option>
+            <option value="Finances">Finances / Bancs</option>
+            <option value="Salut">Salut / Metges</option>
+            <option value="Legal">Legal / Contractes</option>
+            <option value="Estudis">Estudis / Formació</option>
+            <option value="Vehicles">Vehicles</option>
+            <option value="Llar">Llar / Factures</option>
+            <option value="Viatges">Viatges</option>
+            <option value="Esbarjo">Esbarjo / Hobbies</option>
+            <option value="Projectes">Projectes propis</option>
+            <option value="Diversos">Diversos</option>
+          </select>
+        </div>
+        <div id="editTagsGroup" class="form-group">
+          <label class="form-label" for="editTags">Etiquetes</label>
+          <input id="editTags" type="text" placeholder="ex: urgent, client, idea" autocomplete="off" />
+          <div class="form-help">Separa-les amb comes. Les podràs reutilitzar com a filtres ràpids.</div>
+        </div>
+
+        <div id="editFolderDescGroup" class="form-group hidden">
+          <label class="form-label" for="editFolderDesc">Descripció (Opcional)</label>
+          <input id="editFolderDesc" type="text" placeholder="Petita descripció..." autocomplete="off" />
+        </div>
+
+        <!-- Color Picker Només per Carpetes -->
+        <div id="editFolderColorGroup" class="form-group hidden">
+          <label class="form-label" for="editFolderColor">Color de la Carpeta</label>
+          <div class="color-picker-group">
+            <input type="color" id="editFolderColor" class="folder-color-input" />
+            <span class="color-help">Tria el color</span>
+          </div>
+        </div>
+        <div id="editContentGroup" class="form-group hidden">
+          <label class="form-label" for="editContent">Contingut del Document</label>
+          <div class="editor-shell">
+            <div class="editor-toolbar" role="toolbar" aria-label="Eines d'edició de text">
+              <button type="button" class="toolbar-btn" data-command="bold" title="Negreta"><b>B</b></button>
+              <button type="button" class="toolbar-btn" data-command="italic" title="Cursiva"><i>I</i></button>
+              <button type="button" class="toolbar-btn" data-command="undo" title="Desfer (Cmd/Ctrl+Z)"><span aria-hidden="true">↶</span></button>
+              <button type="button" class="toolbar-btn" data-command="redo" title="Refer (Cmd/Ctrl+Shift+Z)"><span aria-hidden="true">↷</span></button>
+              <button type="button" class="toolbar-btn toolbar-btn-wide" data-command="formatBlock" data-value="H1" title="Títol principal">H1</button>
+              <button type="button" class="toolbar-btn toolbar-btn-wide" data-command="formatBlock" data-value="H2" title="Subtítol">H2</button>
+              <button type="button" class="toolbar-btn" data-command="insertUnorderedList" title="Llista">≡</button>
+              <button type="button" class="toolbar-btn toolbar-btn-wide" data-command="removeFormat" title="Netejar format">Tx</button>
+            </div>
+            <div id="editContent" class="custom-richtext" contenteditable="true" data-placeholder="Escriu o enganxa aquí el teu text..."></div>
+            <div class="editor-statusbar">
+              <div class="editor-metrics-group">
+                <span id="editorWordCount" class="editor-metric">0 paraules · 0 caràcters</span>
+                <span id="editorReadingTime" class="editor-metric">0 min lectura</span>
+              </div>
+              <span id="editorSaveStatus" class="editor-save-status" data-state="idle">Sense canvis</span>
+            </div>
+          </div>
+          <div id="editDocumentTools" class="edit-document-tools hidden">
+            <button id="editHistoryBtn" type="button" class="btn btn-secondary btn-small">Historial</button>
+            <button id="editorUndoBtn" type="button" class="btn btn-secondary btn-small">Desfer</button>
+            <button id="editorRedoBtn" type="button" class="btn btn-secondary btn-small">Refer</button>
+            <button id="editorSearchBtn" type="button" class="btn btn-secondary btn-small">Cerca al document</button>
+            <button id="editorFocusBtn" type="button" class="btn btn-secondary btn-small">Mode focus</button>
+            <button id="exportTxtBtn" type="button" class="btn btn-secondary btn-small">Exporta TXT</button>
+            <button id="exportMdBtn" type="button" class="btn btn-secondary btn-small">Exporta MD</button>
+            <button id="exportHtmlBtn" type="button" class="btn btn-secondary btn-small">Exporta HTML</button>
+          </div>
+          <div class="editor-enhancements">
+            <div id="editorSearchPanel" class="editor-search-panel hidden">
+              <div class="editor-search-header">
+                <strong>Cerca i reemplaça</strong>
+                <button id="editorSearchCloseBtn" type="button" class="btn btn-secondary btn-small">Tancar</button>
+              </div>
+              <div class="editor-search-grid">
+                <label class="input-group compact-group">
+                  <span class="form-label">Cerca</span>
+                  <input id="editorSearchInput" type="text" placeholder="Paraula o frase" autocomplete="off" spellcheck="false" />
+                </label>
+                <label class="input-group compact-group">
+                  <span class="form-label">Reemplaça per</span>
+                  <input id="editorReplaceInput" type="text" placeholder="Text nou" autocomplete="off" spellcheck="false" />
+                </label>
+              </div>
+              <div class="editor-search-actions">
+                <button id="editorSearchPrevBtn" type="button" class="btn btn-secondary btn-small">Anterior</button>
+                <button id="editorSearchNextBtn" type="button" class="btn btn-secondary btn-small">Següent</button>
+                <button id="editorReplaceBtn" type="button" class="btn btn-secondary btn-small">Reemplaça</button>
+                <button id="editorReplaceAllBtn" type="button" class="btn btn-secondary btn-small">Reemplaça-ho tot</button>
+                <span id="editorSearchSummary" class="editor-search-summary">Sense cerca activa</span>
+              </div>
+            </div>
+            <div class="editor-outline-card">
+              <div class="editor-outline-header">
+                <div>
+                  <div class="editor-outline-label">Esquema del document</div>
+                  <p class="editor-outline-text">Els títols H1, H2 i H3 apareixen aquí per moure't ràpidament per textos llargs.</p>
+                </div>
+                <span id="editorOutlineCount" class="badge workspace-badge">0</span>
+              </div>
+              <div id="editorOutlineEmpty" class="editor-outline-empty">Encara no hi ha cap títol. Fes servir els botons H1/H2 per estructurar el document.</div>
+              <ul id="editorOutlineList" class="editor-outline-list"></ul>
+            </div>
+          </div>
+        </div>
+        <div id="mediaPreviewGroup" class="form-group hidden media-preview-container">
+          <!-- Dynamic media will be injected here (img, video, audio, embed) -->
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="editCancelBtn" type="button" class="btn btn-secondary btn-flex">Cancel·lar</button>
+        <button id="editSaveBtn" type="button" class="btn btn-primary btn-flex">Desar canvis</button>
+      </div>
+    </div>
+
+    <!-- Versions Modal -->
+    <div id="versionsModal" class="modal-box modal-large hidden">
+      <h3 class="modal-title">Historial de versions</h3>
+      <p class="modal-text">Revisa versions anteriors del document i restaura la que necessitis.</p>
+      <div class="versions-layout">
+        <div class="versions-sidebar">
+          <div id="versionsEmptyState" class="versions-empty hidden">Encara no hi ha versions desades d'aquest document.</div>
+          <ul id="versionsList" class="versions-list"></ul>
+        </div>
+        <div class="versions-preview-panel">
+          <div class="versions-preview-meta">
+            <strong id="versionPreviewTitle">Cap versió seleccionada</strong>
+            <span id="versionPreviewMeta">Selecciona una versió per previsualitzar-la</span>
+          </div>
+          <div id="versionPreviewContent" class="version-preview-content"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="versionsBackBtn" class="btn btn-secondary btn-flex">Tornar a l'editor</button>
+        <button id="restoreVersionBtn" class="btn btn-primary btn-flex">Restaurar versió</button>
+      </div>
+    </div>
+
+    <!-- Backup History Modal -->
+    <div id="backupHistoryModal" class="modal-box modal-large hidden">
+      <h3 class="modal-title">Historial de backups automàtics</h3>
+      <p class="modal-text">Sutsumu guarda còpies internes comprimides dels canvis importants. Des d'aquí pots revisar-les, descarregar-les o restaurar-ne una.</p>
+      <div class="versions-layout backups-layout">
+        <div class="versions-sidebar">
+          <div id="backupHistoryEmptyState" class="versions-empty hidden">Encara no hi ha backups interns complets disponibles en aquesta instal·lació.</div>
+          <ul id="backupHistoryList" class="versions-list"></ul>
+        </div>
+        <div class="versions-preview-panel">
+          <div class="versions-preview-meta">
+            <strong id="backupPreviewTitle">Cap backup seleccionat</strong>
+            <span id="backupPreviewMeta">Selecciona un backup per veure'n el resum</span>
+          </div>
+          <div id="backupPreviewStats" class="backup-preview-stats"></div>
+          <div id="backupPreviewNotes" class="backup-preview-notes">Els backups automàtics es guarden internament en ZIP comprimit a IndexedDB. El botó "Exportar dades" continua generant un JSON extern manual.</div>
+        </div>
+      </div>
+      <div class="modal-actions backup-modal-actions">
+        <button id="backupHistoryCloseBtn" class="btn btn-secondary btn-flex">Tancar</button>
+        <button id="downloadSelectedBackupBtn" class="btn btn-secondary btn-flex">Descarrega ZIP</button>
+        <button id="restoreSelectedBackupBtn" class="btn btn-primary btn-flex">Restaurar backup</button>
+        <button id="deleteSelectedBackupBtn" class="btn btn-danger-ghost btn-flex">Eliminar backup</button>
+      </div>
+    </div>
+
+    <!-- Command Palette Modal -->
+    <div id="commandPaletteModal" class="modal-box modal-large command-palette-modal hidden">
+      <div class="command-palette-header">
+        <div>
+          <h3 class="modal-title">Paleta de comandes</h3>
+          <p class="modal-text">Cerca accions, documents, carpetes i accessos ràpids. Prem Enter per executar la selecció.</p>
+        </div>
+        <span class="badge workspace-badge">⌘/Ctrl + K</span>
+      </div>
+      <div class="command-palette-search-wrap">
+        <input id="commandPaletteInput" type="text" class="command-palette-input" placeholder="Escriu una ordre o el nom d'un document..." autocomplete="off" spellcheck="false" />
+      </div>
+      <div id="commandPaletteHint" class="command-palette-hint">Pots escriure "nou", "workspace", "backup", "favorit" o el nom d'un document.</div>
+      <div id="commandPaletteEmpty" class="command-palette-empty hidden">No s'ha trobat cap ordre ni document amb aquest text.</div>
+      <ul id="commandPaletteList" class="command-palette-list"></ul>
+      <div class="modal-actions">
+        <button id="commandPaletteCloseBtn" class="btn btn-secondary btn-flex">Tancar</button>
+      </div>
+    </div>
+
+    <!-- Move Modal -->
+    <div id="moveModal" class="modal-box hidden">
+      <h3 class="modal-title">Moure a...</h3>
+      <p class="modal-text">Selecciona la carpeta destí per moure l'element <strong id="moveTargetName"></strong>.</p>
+      <div class="modal-form">
+        <div class="form-group">
+          <label class="form-label" for="moveSelect">Ruta destí</label>
+          <select id="moveSelect" class="custom-select">
+            <!-- Emplenat per JS -->
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="moveCancelBtn" class="btn btn-secondary btn-flex">Cancel·lar</button>
+        <button id="moveSaveBtn" class="btn btn-primary btn-flex">Moure aquí</button>
+      </div>
+    </div>
+    <!-- Global Drag Overlay -->
+    <div id="globalDragOverlay" class="global-drag-overlay hidden">
+      <div class="drag-overlay-content">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <h2>Deixa anar el fitxer aquí...</h2>
+        <p>Es pujarà automàticament a Sutsumu</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Local vendor dependencies so Sutsumu keeps working from file:// and offline -->
+  <script src="vendor/localforage-1.10.0.min.js"></script>
+  <script src="vendor/jszip-3.1.5.min.js"></script>
+  <script src="vendor/epub.min.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>
