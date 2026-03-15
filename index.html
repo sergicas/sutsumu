@@ -387,6 +387,10 @@
                       Aquesta fase només llegeix i compara un head remot. Encara no aplicarà canvis a cegues sobre l'app local.
                     </div>
                     <div class="sync-remote-url-row">
+                      <select id="remoteShadowMode" class="custom-select">
+                        <option value="bundle-url">Bundle directe</option>
+                        <option value="provider-head-url">Head backend</option>
+                      </select>
                       <input id="remoteShadowUrl" type="url" placeholder="https://.../shadow-bundle.json o /shadow-bundle.json" autocomplete="off" />
                       <button id="connectRemoteShadowUrlBtn" type="button" class="btn btn-secondary btn-small" disabled>Connectar URL</button>
                     </div>

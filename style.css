@@ -2042,6 +2042,10 @@ ul.doc-list {
   min-width: 0;
 }
 
+.sync-remote-url-row select {
+  flex: 0 0 180px;
+}
+
 @media (max-width: 760px) {
   .sync-prep-grid,
   .sync-prep-lists {

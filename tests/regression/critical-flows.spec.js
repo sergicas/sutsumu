@@ -209,6 +209,65 @@ test('connects a remote shadow URL and compares it safely', async ({ page, brows
   await remoteContext.close();
 });
 
+test('connects a provider head endpoint and resolves the remote bundle safely', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio Provider Head',
+    content: 'Remote provider head endpoint',
+    tags: 'provider, head'
+  });
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('provider-head-bundle.json');
+  await exportDownload.saveAs(bundlePath);
+  const bundleBody = require('fs').readFileSync(bundlePath, 'utf8');
+  const bundle = JSON.parse(bundleBody);
+  const latestRevision = bundle.revisions[0];
+
+  const remoteContext = await browser.newContext();
+  await remoteContext.route('https://provider.example/head.json', route => route.fulfill({
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*'
+    },
+    body: JSON.stringify({
+      schema: 'sutsumu-cloud-sync-provider-head',
+      provider: 'generic-rest',
+      workspaceId: latestRevision.workspaceId,
+      workspaceName: latestRevision.workspaceName,
+      headRevisionId: latestRevision.revisionId,
+      payloadSignature: latestRevision.payloadSignature,
+      bundleUrl: 'https://provider.example/bundle.json'
+    })
+  }));
+  await remoteContext.route('https://provider.example/bundle.json', route => route.fulfill({
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*'
+    },
+    body: bundleBody
+  }));
+
+  const remotePage = await remoteContext.newPage();
+  await gotoApp(remotePage);
+  await remotePage.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await remotePage.locator('#remoteShadowUrl').fill('https://provider.example/head.json');
+  await remotePage.locator('#connectRemoteShadowUrlBtn').click();
+  await expectToast(remotePage, 'URL remota connectada');
+  await expect(remotePage.locator('#syncRemoteBadge')).toContainText('Remot disponible');
+  await expect(remotePage.locator('#syncRemoteSourceValue')).toContainText('head:https://provider.example/head.json');
+  await remoteContext.close();
+});
+
 test('writes an automatic external backup and keeps the last good copy if the app becomes empty', async ({ page }) => {
   await installExternalBackupStub(page);
   await gotoApp(page);

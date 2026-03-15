@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const syncRemoteHeadValueEl = document.getElementById('syncRemoteHeadValue');
   const syncRemoteCompareValueEl = document.getElementById('syncRemoteCompareValue');
   const syncRemoteImportedValueEl = document.getElementById('syncRemoteImportedValue');
+  const remoteShadowModeSelectEl = document.getElementById('remoteShadowMode');
   const remoteShadowUrlInput = document.getElementById('remoteShadowUrl');
   const connectRemoteShadowUrlBtn = document.getElementById('connectRemoteShadowUrlBtn');
   const importRemoteShadowBtn = document.getElementById('importRemoteShadowBtn');
@@ -259,6 +260,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const SYNC_PREP_REFRESH_DEBOUNCE_MS = 900;
   const SHADOW_SYNC_SCHEMA = 'sutsumu-cloud-sync-shadow-revision';
   const SHADOW_SYNC_BUNDLE_SCHEMA = 'sutsumu-cloud-sync-shadow-bundle';
+  const REMOTE_PROVIDER_HEAD_SCHEMA = 'sutsumu-cloud-sync-provider-head';
   const SHADOW_SYNC_STATE_KEY = 'sutsumu_shadow_sync_state_v1';
   const SHADOW_SYNC_HISTORY_KEY = 'sutsumu_shadow_sync_history_v1';
   const SHADOW_SYNC_HISTORY_LIMIT = 18;
@@ -1088,7 +1090,7 @@ function normalizeRemoteShadowConfig(rawConfig) {
   const trimmedUrl = typeof rawConfig.url === 'string' ? rawConfig.url.trim() : '';
   if (!trimmedUrl) return null;
   return {
-    mode: 'url',
+    mode: rawConfig.mode === 'provider-head-url' ? 'provider-head-url' : 'bundle-url',
     url: trimmedUrl,
     lastFetchedAt: typeof rawConfig.lastFetchedAt === 'string' ? rawConfig.lastFetchedAt : '',
     lastStatus: typeof rawConfig.lastStatus === 'string' ? rawConfig.lastStatus : 'idle',
@@ -1144,8 +1146,46 @@ function writeRemoteShadowSourceSnapshot(source) {
 }
 
 function getRemoteShadowSourceLabel() {
-  if (remoteShadowConfig?.url) return remoteShadowConfig.url;
+  if (remoteShadowConfig?.url) {
+    return remoteShadowConfig.mode === 'provider-head-url'
+      ? `head:${remoteShadowConfig.url}`
+      : remoteShadowConfig.url;
+  }
   return remoteShadowSource?.sourceName || 'encara no';
+}
+
+function getSelectedRemoteShadowMode() {
+  return remoteShadowModeSelectEl?.value === 'provider-head-url' ? 'provider-head-url' : (remoteShadowConfig?.mode || 'bundle-url');
+}
+
+function updateRemoteProviderModeUI() {
+  const mode = getSelectedRemoteShadowMode();
+  if (remoteShadowModeSelectEl && remoteShadowModeSelectEl.value !== mode) {
+    remoteShadowModeSelectEl.value = mode;
+  }
+  if (!remoteShadowUrlInput) return;
+  remoteShadowUrlInput.placeholder = mode === 'provider-head-url'
+    ? 'https://.../head.json o /head.json'
+    : 'https://.../shadow-bundle.json o /shadow-bundle.json';
+}
+
+function normalizeRemoteProviderHead(rawHead, sourceUrl = '') {
+  if (!rawHead || typeof rawHead !== 'object' || rawHead.schema !== REMOTE_PROVIDER_HEAD_SCHEMA) {
+    throw new Error('La URL remota no retorna un head provider compatible.');
+  }
+  const rawBundleUrl = typeof rawHead.bundleUrl === 'string' && rawHead.bundleUrl.trim() ? rawHead.bundleUrl.trim() : '';
+  if (!rawBundleUrl) throw new Error('El head remot no inclou cap bundleUrl.');
+  const resolvedBundleUrl = new URL(rawBundleUrl, sourceUrl || window.location.href).toString();
+  return {
+    schema: REMOTE_PROVIDER_HEAD_SCHEMA,
+    provider: typeof rawHead.provider === 'string' && rawHead.provider.trim() ? rawHead.provider.trim() : 'generic-rest',
+    workspaceId: typeof rawHead.workspaceId === 'string' ? rawHead.workspaceId : '',
+    workspaceName: typeof rawHead.workspaceName === 'string' ? rawHead.workspaceName : '',
+    headRevisionId: typeof rawHead.headRevisionId === 'string' ? rawHead.headRevisionId : '',
+    payloadSignature: typeof rawHead.payloadSignature === 'string' ? rawHead.payloadSignature : '',
+    bundleUrl: resolvedBundleUrl,
+    fetchedAt: typeof rawHead.fetchedAt === 'string' ? rawHead.fetchedAt : new Date().toISOString()
+  };
 }
 
 async function fetchRemoteShadowBundleFromUrl(url) {
@@ -1164,9 +1204,34 @@ async function fetchRemoteShadowBundleFromUrl(url) {
   return parsed;
 }
 
+async function fetchRemoteShadowBundleFromProviderHead(url) {
+  const response = await fetch(url, {
+    method: 'GET',
+    cache: 'no-store',
+    headers: { 'Accept': 'application/json' }
+  });
+  if (!response.ok) {
+    throw new Error(`No s'ha pogut llegir el head remot (${response.status}).`);
+  }
+  const parsedHead = normalizeRemoteProviderHead(await response.json(), url);
+  const cachedHead = getShadowHistoryHead(remoteShadowSource?.revisions || [], remoteShadowSource?.state?.lastRevisionId || '');
+  if (cachedHead && parsedHead.headRevisionId && cachedHead.revisionId === parsedHead.headRevisionId) {
+    return {
+      descriptor: parsedHead,
+      bundle: remoteShadowSource
+    };
+  }
+  const bundle = await fetchRemoteShadowBundleFromUrl(parsedHead.bundleUrl);
+  return {
+    descriptor: parsedHead,
+    bundle
+  };
+}
+
 async function connectRemoteShadowUrl(options = {}) {
   const { silent = false } = options;
   const rawUrl = String(remoteShadowUrlInput?.value || remoteShadowConfig?.url || '').trim();
+  const mode = getSelectedRemoteShadowMode();
   if (!rawUrl) {
     showToast('Introdueix una URL de bundle remot.', 'error');
     return false;
@@ -1178,6 +1243,7 @@ async function connectRemoteShadowUrl(options = {}) {
   }
 
   writeRemoteShadowConfigSnapshot({
+    mode,
     url: rawUrl,
     lastStatus: 'checking',
     lastFetchedAt: remoteShadowConfig?.lastFetchedAt || '',
@@ -1185,13 +1251,22 @@ async function connectRemoteShadowUrl(options = {}) {
     autoCheckOnStart: true
   });
   try {
-    const parsed = await fetchRemoteShadowBundleFromUrl(rawUrl);
+    let parsed;
+    let sourceName = rawUrl;
+    if (mode === 'provider-head-url') {
+      const providerResult = await fetchRemoteShadowBundleFromProviderHead(rawUrl);
+      parsed = providerResult.bundle;
+      sourceName = providerResult.descriptor.bundleUrl;
+    } else {
+      parsed = await fetchRemoteShadowBundleFromUrl(rawUrl);
+    }
     const normalized = writeRemoteShadowSourceSnapshot({
       ...parsed,
-      sourceName: rawUrl,
+      sourceName,
       importedAt: new Date().toISOString()
     });
     writeRemoteShadowConfigSnapshot({
+      mode,
       url: rawUrl,
       lastStatus: 'connected',
       lastFetchedAt: new Date().toISOString(),
@@ -1209,6 +1284,7 @@ async function connectRemoteShadowUrl(options = {}) {
   } catch (err) {
     console.warn("No s'ha pogut connectar la URL remota de shadow sync.", err);
     writeRemoteShadowConfigSnapshot({
+      mode,
       url: rawUrl,
       lastStatus: 'error',
       lastFetchedAt: remoteShadowConfig?.lastFetchedAt || '',
@@ -1321,6 +1397,7 @@ function computeRemoteShadowComparison() {
 
 function updateRemoteShadowUI() {
   if (!syncRemoteStatusTextEl || !syncRemoteBadgeEl) return;
+  updateRemoteProviderModeUI();
   const comparison = computeRemoteShadowComparison();
   const remoteHead = comparison.remoteHead;
   let description = comparison.description;
@@ -6536,6 +6613,12 @@ async function applyPendingAppUpdate() {
   });
   forceShadowRevisionBtn?.addEventListener('click', () => {
     createShadowRevisionNow('shadow-manual-forced', { silent: false, force: true });
+  });
+  remoteShadowModeSelectEl?.addEventListener('change', () => {
+    updateRemoteProviderModeUI();
+    if (connectRemoteShadowUrlBtn) {
+      connectRemoteShadowUrlBtn.disabled = !String(remoteShadowUrlInput?.value || '').trim();
+    }
   });
   remoteShadowUrlInput?.addEventListener('input', () => {
     if (connectRemoteShadowUrlBtn) {
