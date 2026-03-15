@@ -184,6 +184,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const moveSaveBtn = document.getElementById('moveSaveBtn');
 
   // Constants i Estat de l'aplicació
+  const APP_VERSION = '1.0.0';
+  const APP_RELEASE_LABEL = 'estable';
   const STORAGE_KEY = 'bento_simple_docs';
   const EXPANDED_KEY = 'bento_expanded_folders';
   const EDIT_DRAFT_PREFIX = 'bento_edit_draft_v1:';
@@ -208,7 +210,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const RECENT_WORKSPACES_KEY = 'bento_recent_workspaces_v1';
   const RECENT_WORKSPACES_LIMIT = 5;
   const WORKSPACE_AUTOSAVE_DEBOUNCE_MS = 1800;
-  const WORKSPACE_FILE_EXTENSION = '.bento-workspace.json';
+  const WORKSPACE_FILE_EXTENSION = '.sutsumu-workspace.json';
+  const LEGACY_WORKSPACE_FILE_EXTENSION = '.bento-workspace.json';
   const RECENT_DOCS_KEY = 'bento_recent_docs_v1';
   const RECENT_DOCS_LIMIT = 8;
   const PWA_DISMISSED_UPDATE_KEY = 'bento_pwa_update_dismissed_v1';
@@ -1765,6 +1768,7 @@ async function applyPendingAppUpdate() {
     const safeValue = String(value || '').trim();
     if (!safeValue) return 'Sutsumu Workspace';
     return safeValue
+      .replace(/\.sutsumu-workspace\.json$/i, '')
       .replace(/\.bento-workspace\.json$/i, '')
       .replace(/\.json$/i, '')
       .trim() || 'Sutsumu Workspace';
@@ -1782,7 +1786,7 @@ async function applyPendingAppUpdate() {
 
   function getWorkspaceSuggestedFilename() {
     const base = slugifyFileName(getWorkspaceDisplayName() === 'Sense workspace'
-      ? (docs.find(item => item.type === 'folder' && !item.isDeleted)?.title || 'bento-workspace')
+      ? (docs.find(item => item.type === 'folder' && !item.isDeleted)?.title || 'sutsumu-workspace')
       : getWorkspaceDisplayName());
     return `${base}${WORKSPACE_FILE_EXTENSION}`;
   }
@@ -1839,7 +1843,7 @@ async function applyPendingAppUpdate() {
       workspaceModeBadgeEl.textContent = workspaceDirty ? 'Pendent' : 'Compatible';
       workspaceStatusTextEl.textContent = workspaceDirty
         ? `Workspace compatible: ${getWorkspaceDisplayName()}. Hi ha canvis pendents; prem “${labels.save}” per exportar el JSON actualitzat.`
-        : `Workspace compatible: ${getWorkspaceDisplayName()}. Última sincronització manual: ${savedLabel}.`;
+        : `Workspace compatible: ${getWorkspaceDisplayName()}. Última sincronització manual: ${savedLabel} · v${APP_VERSION}.`;
       renderRecentWorkspaces();
       return;
     }
@@ -1909,6 +1913,8 @@ async function applyPendingAppUpdate() {
       schema: WORKSPACE_SCHEMA,
       version: WORKSPACE_VERSION,
       app: 'Sutsumu',
+      appVersion: APP_VERSION,
+      appRelease: APP_RELEASE_LABEL,
       workspaceId: existingId,
       workspaceName: getWorkspaceDisplayName() === 'Sense workspace' ? 'Sutsumu Workspace' : getWorkspaceDisplayName(),
       workspaceBindingMode: isWorkspaceConnected() ? 'fs' : (isPortableWorkspaceMode() ? 'portable' : 'portable'),
@@ -2225,7 +2231,7 @@ async function applyPendingAppUpdate() {
         suggestedName: getWorkspaceSuggestedFilename(),
         types: [{
           description: 'Sutsumu Workspace',
-          accept: { 'application/json': [WORKSPACE_FILE_EXTENSION, '.json'] }
+          accept: { 'application/json': [WORKSPACE_FILE_EXTENSION, LEGACY_WORKSPACE_FILE_EXTENSION, '.json'] }
         }],
         excludeAcceptAllOption: false
       });
@@ -2250,7 +2256,7 @@ async function applyPendingAppUpdate() {
         multiple: false,
         types: [{
           description: 'Sutsumu Workspace o backup JSON',
-          accept: { 'application/json': [WORKSPACE_FILE_EXTENSION, '.json'] }
+          accept: { 'application/json': [WORKSPACE_FILE_EXTENSION, LEGACY_WORKSPACE_FILE_EXTENSION, '.json'] }
         }],
         excludeAcceptAllOption: false
       });
@@ -3801,6 +3807,9 @@ async function applyPendingAppUpdate() {
       version: FULL_BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
       reason,
+      app: 'Sutsumu',
+      appVersion: APP_VERSION,
+      appRelease: APP_RELEASE_LABEL,
       docs: await serializeDocsForFullBackup(docs),
       expandedFolders: normalizeExpandedFolders(expandedFolders, normalizeDocs(docs))
     };
@@ -4037,7 +4046,7 @@ async function applyPendingAppUpdate() {
         signature,
         stats: createBackupStats(payload),
         archiveBlob,
-        archiveName: `bento_backup_auto_${createdAt.replace(/[:.]/g, '-')}.zip`
+        archiveName: `sutsumu_backup_auto_${createdAt.replace(/[:.]/g, '-')}.zip`
       });
       const dedupedHistory = existingHistory.filter(item => item.signature !== signature);
       const savedHistory = await writeFullBackupHistory([entry, ...dedupedHistory].slice(0, FULL_BACKUP_LIMIT));
@@ -4145,12 +4154,12 @@ async function applyPendingAppUpdate() {
     if (!entry) return;
     try {
       if (entry.archiveBlob) {
-        triggerDownload(entry.archiveName || `bento_backup_auto_${entry.id}.zip`, entry.archiveBlob, 'application/zip');
+        triggerDownload(entry.archiveName || `sutsumu_backup_auto_${entry.id}.zip`, entry.archiveBlob, 'application/zip');
         showToast('Backup intern descarregat en ZIP.');
         return;
       }
       const payload = await extractPayloadFromCompressedBackup(entry);
-      triggerDownload(`bento_backup_${entry.id}.json`, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
+      triggerDownload(`sutsumu_backup_${entry.id}.json`, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
       showToast('Backup descarregat en JSON.');
     } catch (err) {
       console.error(err);
@@ -6732,7 +6741,7 @@ async function applyPendingAppUpdate() {
 
     await saveData();
     renderData();
-    showToast("Material restaurat a l'escriptori");
+    showToast('Material restaurat correctament');
   }
 
   function purgeItem(id) {
@@ -6766,7 +6775,7 @@ async function applyPendingAppUpdate() {
     try {
       const payload = await createFullBackupPayload('manual-export');
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      triggerDownload(`bento_backup_complet_${timestamp}.json`, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
+      triggerDownload(`sutsumu_backup_complet_${timestamp}.json`, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
       showToast('Còpia completa exportada amb carpetes, versions i fitxers adjunts.');
     } catch (err) {
       console.error(err);

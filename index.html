@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sutsumu - Gestor de Documents i Carpetes</title>
+  <title>Sutsumu v1.0.0 - Gestor de Documents i Carpetes</title>
   <meta name="theme-color" content="#0ea5e9" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -38,7 +38,7 @@
           <polyline points="3.27 6.96 12 12.01 20.73 6.96" stroke="url(#bentoGradientDark)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>
           <line x1="12" y1="22.08" x2="12" y2="12" stroke="url(#bentoGradientDark)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></line>
         </svg>
-        <h1 style="background: linear-gradient(90deg, #0ea5e9, #8b5cf6); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin: 0;">Sutsumu</h1>
+        <div class="topbar-brand-copy"><h1 style="background: linear-gradient(90deg, #0ea5e9, #8b5cf6); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin: 0;">Sutsumu</h1><span class="topbar-version-badge">v1.0.0 estable</span></div>
       </a>
       <p class="topbar-subtitle">El teu espai organitzat: documents i carpetes il·limitades</p>
     </div>
@@ -232,7 +232,7 @@
                   <button id="saveWorkspaceBtn" type="button" class="btn btn-secondary btn-small" disabled>Desar workspace</button>
                   <button id="saveWorkspaceAsBtn" type="button" class="btn btn-secondary btn-small" disabled>Desar com...</button>
                   <button id="closeWorkspaceBtn" type="button" class="btn btn-danger-ghost btn-small" disabled>Desconnectar</button>
-                  <input id="workspaceFileInput" type="file" accept=".bento-workspace.json,.json,application/json" hidden />
+                  <input id="workspaceFileInput" type="file" accept=".sutsumu-workspace.json,.bento-workspace.json,.json,application/json" hidden />
                 </div>
                 <div id="workspaceLocalHint" class="workspace-local-hint hidden">Ara mateix treballes només en local dins del navegador. Desa o exporta un workspace per tenir una còpia portable i reobrible.</div>
                 <div id="workspaceSyncHint" class="workspace-sync-hint">Per sincronitzar Mac i iPhone, guarda sempre el mateix fitxer workspace a iCloud Drive o Fitxers i torna'l a obrir des de cada dispositiu quan vulguis refrescar dades.</div>
@@ -254,7 +254,7 @@
                     <div class="quickstart-label">Guia ràpida de Sutsumu</div>
                     <p class="quickstart-text">Tres hàbits perquè Sutsumu sigui realment segur i còmode d'usar cada dia.</p>
                   </div>
-                  <span class="badge quickstart-badge">v13</span>
+                  <span class="badge quickstart-badge">v1.0.0</span>
                 </div>
                 <ol class="quickstart-list">
                   <li><strong>Desa un workspace</strong> si vols una còpia portable fora del navegador.</li>
