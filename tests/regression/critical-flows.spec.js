@@ -100,6 +100,47 @@ test('exports a sync payload base without mixing in local-only state', async ({ 
   expect(Object.prototype.hasOwnProperty.call(payload, 'recentDocs')).toBe(false);
 });
 
+test('builds local shadow revisions and exports an immutable shadow bundle', async ({ page }, testInfo) => {
+  await gotoApp(page);
+
+  const title = 'Regressio Shadow Sync';
+  await createDocument(page, {
+    title,
+    content: 'Primera base shadow',
+    tags: 'shadow, sync'
+  });
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  await openDocumentFromTree(page, title);
+  await fillEditor(page.locator('#editContent'), 'Segona base shadow');
+  await page.locator('#editSaveBtn').click();
+  await expectToast(page, 'Canvis desats correctament');
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+  await expect(page.locator('#syncShadowQueueValue')).toContainText('2');
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const download = await downloadPromise;
+  const bundlePath = testInfo.outputPath('shadow-sync-bundle.json');
+  await download.saveAs(bundlePath);
+
+  const bundle = JSON.parse(require('fs').readFileSync(bundlePath, 'utf8'));
+  expect(bundle.schema).toBe('sutsumu-cloud-sync-shadow-bundle');
+  expect(Array.isArray(bundle.revisions)).toBeTruthy();
+  expect(bundle.revisions.length).toBeGreaterThanOrEqual(2);
+  expect(bundle.revisions[0].payload.schema).toBe('sutsumu-cloud-sync-payload');
+  expect(Object.prototype.hasOwnProperty.call(bundle.revisions[0].payload.snapshot, 'expandedFolders')).toBe(false);
+
+  const revisionIds = new Set(bundle.revisions.map(entry => entry.revisionId));
+  const chainedRevision = bundle.revisions.find(entry => entry.baseRevisionId && revisionIds.has(entry.baseRevisionId));
+  expect(Boolean(chainedRevision)).toBeTruthy();
+});
+
 test('writes an automatic external backup and keeps the last good copy if the app becomes empty', async ({ page }) => {
   await installExternalBackupStub(page);
   await gotoApp(page);

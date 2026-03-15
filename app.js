@@ -66,6 +66,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   const syncPrepIncludedListEl = document.getElementById('syncPrepIncludedList');
   const syncPrepLocalOnlyListEl = document.getElementById('syncPrepLocalOnlyList');
   const downloadSyncPayloadBtn = document.getElementById('downloadSyncPayloadBtn');
+  const syncShadowStatusTextEl = document.getElementById('syncShadowStatusText');
+  const syncShadowBadgeEl = document.getElementById('syncShadowBadge');
+  const syncShadowQueueValueEl = document.getElementById('syncShadowQueueValue');
+  const syncShadowHeadValueEl = document.getElementById('syncShadowHeadValue');
+  const syncShadowBaseValueEl = document.getElementById('syncShadowBaseValue');
+  const syncShadowUpdatedValueEl = document.getElementById('syncShadowUpdatedValue');
+  const forceShadowRevisionBtn = document.getElementById('forceShadowRevisionBtn');
+  const exportShadowBundleBtn = document.getElementById('exportShadowBundleBtn');
+  const clearShadowHistoryBtn = document.getElementById('clearShadowHistoryBtn');
   const recentDocsListEl = document.getElementById('recentDocsList');
   const recentDocsEmptyEl = document.getElementById('recentDocsEmpty');
   const recentDocsCountEl = document.getElementById('recentDocsCount');
@@ -236,6 +245,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const SYNC_PAYLOAD_VERSION = 1;
   const SYNC_PREP_META_KEY = 'sutsumu_sync_prep_meta_v1';
   const SYNC_PREP_REFRESH_DEBOUNCE_MS = 900;
+  const SHADOW_SYNC_SCHEMA = 'sutsumu-cloud-sync-shadow-revision';
+  const SHADOW_SYNC_BUNDLE_SCHEMA = 'sutsumu-cloud-sync-shadow-bundle';
+  const SHADOW_SYNC_STATE_KEY = 'sutsumu_shadow_sync_state_v1';
+  const SHADOW_SYNC_HISTORY_KEY = 'sutsumu_shadow_sync_history_v1';
+  const SHADOW_SYNC_HISTORY_LIMIT = 18;
+  const SHADOW_SYNC_DEBOUNCE_MS = 1800;
   const SYNCABLE_COLLECTIONS = Object.freeze(['documents', 'folders', 'tags', 'versions', 'attachmentMetadata']);
   const LOCAL_ONLY_COLLECTIONS = Object.freeze(['expandedFolders', 'recentDocs', 'recentWorkspaces', 'draftsLocals', 'backupHistories', 'workspaceHandles', 'uiState']);
   const SYNCABLE_COLLECTION_LABELS = Object.freeze(['documents', 'carpetes', 'etiquetes', 'versions', "metadades d'adjunts"]);
@@ -307,6 +322,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   let syncPrepMeta = null;
   let syncPrepState = null;
   let syncPrepRefreshTimer = null;
+  let shadowSyncState = null;
+  let shadowSyncHistory = [];
+  let shadowSyncTimer = null;
   let workspaceAutosaveTimer = null;
   let isWorkspaceSaving = false;
   let workspaceLastSavedSignature = '';
@@ -721,6 +739,303 @@ function queueSyncPreparationRefresh(reason = 'local-change') {
     syncPrepRefreshTimer = null;
     refreshSyncPreparationState(reason);
   }, reason === 'bootstrap' ? 0 : SYNC_PREP_REFRESH_DEBOUNCE_MS);
+}
+
+function normalizeShadowSyncState(rawState) {
+  const state = rawState && typeof rawState === 'object' ? rawState : {};
+  return {
+    enabled: state.enabled !== false,
+    status: typeof state.status === 'string' && state.status.trim() ? state.status.trim() : 'idle',
+    lastRevisionId: typeof state.lastRevisionId === 'string' ? state.lastRevisionId : '',
+    lastBaseRevisionId: typeof state.lastBaseRevisionId === 'string' ? state.lastBaseRevisionId : '',
+    lastPayloadSignature: typeof state.lastPayloadSignature === 'string' ? state.lastPayloadSignature : '',
+    lastQueuedAt: typeof state.lastQueuedAt === 'string' ? state.lastQueuedAt : '',
+    lastExportedAt: typeof state.lastExportedAt === 'string' ? state.lastExportedAt : '',
+    lastReason: typeof state.lastReason === 'string' ? state.lastReason : '',
+    lastRemoteStatus: typeof state.lastRemoteStatus === 'string' ? state.lastRemoteStatus : 'not-configured',
+    lastError: typeof state.lastError === 'string' ? state.lastError : '',
+    historyCount: Number.isFinite(Number(state.historyCount)) ? Number(state.historyCount) : 0
+  };
+}
+
+function normalizeShadowSyncEntry(rawEntry) {
+  const entry = rawEntry && typeof rawEntry === 'object' ? rawEntry : {};
+  const payload = entry.payload && typeof entry.payload === 'object' ? entry.payload : null;
+  return {
+    revisionId: typeof entry.revisionId === 'string' && entry.revisionId.trim() ? entry.revisionId.trim() : generateId('shadow-revision'),
+    baseRevisionId: typeof entry.baseRevisionId === 'string' ? entry.baseRevisionId : '',
+    createdAt: typeof entry.createdAt === 'string' && !Number.isNaN(Date.parse(entry.createdAt)) ? entry.createdAt : new Date().toISOString(),
+    reason: typeof entry.reason === 'string' && entry.reason.trim() ? entry.reason.trim() : 'shadow-auto',
+    status: typeof entry.status === 'string' && entry.status.trim() ? entry.status.trim() : 'queued',
+    payloadSignature: typeof entry.payloadSignature === 'string' ? entry.payloadSignature : '',
+    workspaceId: typeof entry.workspaceId === 'string' ? entry.workspaceId : (payload?.workspace?.id || ''),
+    workspaceName: typeof entry.workspaceName === 'string' ? entry.workspaceName : (payload?.workspace?.name || ''),
+    deviceId: typeof entry.deviceId === 'string' ? entry.deviceId : (payload?.device?.id || ''),
+    counts: entry.counts && typeof entry.counts === 'object' ? {
+      folders: Number(entry.counts.folders || 0),
+      documents: Number(entry.counts.documents || 0),
+      deleted: Number(entry.counts.deleted || 0),
+      versions: Number(entry.counts.versions || 0),
+      attachments: Number(entry.counts.attachments || 0),
+      total: Number(entry.counts.total || 0)
+    } : createSyncPayloadCounts(payload?.snapshot?.docs || []),
+    payload,
+    transport: typeof entry.transport === 'string' && entry.transport.trim() ? entry.transport.trim() : 'local-shadow'
+  };
+}
+
+function normalizeShadowSyncHistory(rawHistory) {
+  if (!Array.isArray(rawHistory)) return [];
+  const seen = new Set();
+  return rawHistory
+    .map(normalizeShadowSyncEntry)
+    .filter(entry => {
+      const key = entry.revisionId;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, SHADOW_SYNC_HISTORY_LIMIT);
+}
+
+async function readShadowSyncHistory() {
+  if (getBackupStore()) {
+    try {
+      return normalizeShadowSyncHistory(await getBackupStore().getItem(SHADOW_SYNC_HISTORY_KEY));
+    } catch (err) {
+      console.warn("No s'ha pogut llegir l'historial local de shadow sync.", err);
+    }
+  }
+  return normalizeShadowSyncHistory(safeJSONParse(localStorage.getItem(SHADOW_SYNC_HISTORY_KEY), []));
+}
+
+async function writeShadowSyncHistory(history) {
+  const normalized = normalizeShadowSyncHistory(history);
+  if (getBackupStore()) {
+    try {
+      await getBackupStore().setItem(SHADOW_SYNC_HISTORY_KEY, normalized);
+      shadowSyncHistory = normalized;
+      updateShadowSyncUI();
+      return normalized;
+    } catch (err) {
+      console.warn("No s'ha pogut desar l'historial local de shadow sync a IndexedDB.", err);
+    }
+  }
+  try {
+    localStorage.setItem(SHADOW_SYNC_HISTORY_KEY, JSON.stringify(normalized));
+  } catch (err) {
+    console.warn("No s'ha pogut desar l'historial local de shadow sync a localStorage.", err);
+  }
+  shadowSyncHistory = normalized;
+  updateShadowSyncUI();
+  return normalized;
+}
+
+async function readShadowSyncState() {
+  if (getBackupStore()) {
+    try {
+      return normalizeShadowSyncState(await getBackupStore().getItem(SHADOW_SYNC_STATE_KEY));
+    } catch (err) {
+      console.warn("No s'ha pogut llegir l'estat local de shadow sync.", err);
+    }
+  }
+  return normalizeShadowSyncState(safeJSONParse(localStorage.getItem(SHADOW_SYNC_STATE_KEY), null));
+}
+
+async function writeShadowSyncState(state) {
+  const normalized = normalizeShadowSyncState(state);
+  if (getBackupStore()) {
+    try {
+      await getBackupStore().setItem(SHADOW_SYNC_STATE_KEY, normalized);
+      shadowSyncState = normalized;
+      updateShadowSyncUI();
+      return normalized;
+    } catch (err) {
+      console.warn("No s'ha pogut desar l'estat local de shadow sync a IndexedDB.", err);
+    }
+  }
+  try {
+    localStorage.setItem(SHADOW_SYNC_STATE_KEY, JSON.stringify(normalized));
+  } catch (err) {
+    console.warn("No s'ha pogut desar l'estat local de shadow sync a localStorage.", err);
+  }
+  shadowSyncState = normalized;
+  updateShadowSyncUI();
+  return normalized;
+}
+
+function createShadowSyncShortId(value = '') {
+  return value ? value.slice(0, 10) : 'pendent';
+}
+
+function formatShadowSyncMoment(value = '') {
+  if (!value) return 'encara no';
+  try {
+    return new Date(value).toLocaleString('ca-ES');
+  } catch (_err) {
+    return value;
+  }
+}
+
+function createShadowSyncEntryFromPayload(payload, reason = 'shadow-auto') {
+  const baseRevisionId = shadowSyncState?.lastRevisionId || '';
+  return normalizeShadowSyncEntry({
+    revisionId: generateId('shadow-revision'),
+    baseRevisionId,
+    createdAt: new Date().toISOString(),
+    reason,
+    status: 'queued',
+    payloadSignature: createSyncPayloadSignature(payload),
+    workspaceId: payload.workspace.id,
+    workspaceName: payload.workspace.name,
+    deviceId: payload.device.id,
+    counts: payload.snapshot.counts,
+    payload,
+    transport: 'local-shadow'
+  });
+}
+
+async function persistShadowSyncEntry(entry) {
+  const nextHistory = await writeShadowSyncHistory([entry, ...shadowSyncHistory]);
+  await writeShadowSyncState({
+    ...(shadowSyncState || {}),
+    enabled: true,
+    status: 'ready',
+    lastRevisionId: entry.revisionId,
+    lastBaseRevisionId: entry.baseRevisionId || '',
+    lastPayloadSignature: entry.payloadSignature,
+    lastQueuedAt: entry.createdAt,
+    lastReason: entry.reason,
+    lastRemoteStatus: 'not-configured',
+    lastError: '',
+    historyCount: nextHistory.length
+  });
+  return entry;
+}
+
+async function createShadowRevisionNow(reason = 'shadow-manual', options = {}) {
+  const { silent = false, force = false } = options;
+  const payload = refreshSyncPreparationState(reason);
+  if (!payload.snapshot.docs.length) {
+    await writeShadowSyncState({
+      ...(shadowSyncState || {}),
+      enabled: true,
+      status: 'empty',
+      historyCount: shadowSyncHistory.length,
+      lastError: ''
+    });
+    if (!silent) showToast('Encara no hi ha contingut per crear una revisió shadow.', 'info');
+    return null;
+  }
+
+  const signature = createSyncPayloadSignature(payload);
+  if (!force && shadowSyncState?.lastPayloadSignature === signature) {
+    await writeShadowSyncState({
+      ...(shadowSyncState || {}),
+      enabled: true,
+      status: 'ready',
+      historyCount: shadowSyncHistory.length,
+      lastError: ''
+    });
+    if (!silent) showToast('La darrera revisió shadow ja reflecteix aquest estat.', 'info');
+    return shadowSyncHistory[0] || null;
+  }
+
+  const entry = createShadowSyncEntryFromPayload(payload, reason);
+  await persistShadowSyncEntry(entry);
+  if (!silent) showToast(`Revisió shadow preparada: ${createShadowSyncShortId(entry.revisionId)}`);
+  return entry;
+}
+
+function queueShadowSyncRevision(reason = 'shadow-auto') {
+  if (shadowSyncTimer) clearTimeout(shadowSyncTimer);
+  shadowSyncTimer = setTimeout(async () => {
+    shadowSyncTimer = null;
+    try {
+      await createShadowRevisionNow(`shadow-${reason}`, { silent: true, force: false });
+    } catch (err) {
+      console.warn("No s'ha pogut generar la revisió local de shadow sync.", err);
+      await writeShadowSyncState({
+        ...(shadowSyncState || {}),
+        enabled: true,
+        status: 'error',
+        lastError: err?.message || 'error-shadow-sync',
+        historyCount: shadowSyncHistory.length
+      });
+    }
+  }, SHADOW_SYNC_DEBOUNCE_MS);
+}
+
+function createShadowSyncBundle() {
+  return {
+    schema: SHADOW_SYNC_BUNDLE_SCHEMA,
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    app: 'Sutsumu',
+    appVersion: APP_VERSION,
+    appRelease: APP_RELEASE_LABEL,
+    state: normalizeShadowSyncState(shadowSyncState),
+    revisions: normalizeShadowSyncHistory(shadowSyncHistory)
+  };
+}
+
+function updateShadowSyncUI() {
+  if (!syncShadowStatusTextEl || !syncShadowBadgeEl) return;
+  const state = normalizeShadowSyncState(shadowSyncState);
+  const historyCount = shadowSyncHistory.length;
+  const latest = shadowSyncHistory[0] || null;
+
+  forceShadowRevisionBtn && (forceShadowRevisionBtn.disabled = docs.length === 0);
+  exportShadowBundleBtn && (exportShadowBundleBtn.disabled = historyCount === 0);
+  clearShadowHistoryBtn && (clearShadowHistoryBtn.disabled = historyCount === 0);
+
+  if (state.status === 'error') {
+    syncShadowBadgeEl.textContent = 'Error';
+    syncShadowStatusTextEl.textContent = `La capa local de shadow sync ha fallat en l'últim intent. L'app continua local i segura, pero convé revisar l'estat abans de connectar cap núvol.`;
+  } else if (!docs.length) {
+    syncShadowBadgeEl.textContent = 'Buit';
+    syncShadowStatusTextEl.textContent = 'L\'espai encara és buit. Quan hi hagi contingut, Sutsumu podrà encapsular revisions immutables preparades per al futur backend.';
+  } else if (!historyCount) {
+    syncShadowBadgeEl.textContent = 'Base';
+    syncShadowStatusTextEl.textContent = 'La base remota segura està preparada, pero encara no hi ha revisions shadow guardades en aquest dispositiu.';
+  } else {
+    syncShadowBadgeEl.textContent = 'Shadow';
+    syncShadowStatusTextEl.textContent = `Hi ha ${historyCount} revisions shadow immutables preparades localment. Encara no governen l'app ni substitueixen els teus backups.`;
+  }
+
+  if (syncShadowQueueValueEl) syncShadowQueueValueEl.textContent = String(historyCount);
+  if (syncShadowHeadValueEl) syncShadowHeadValueEl.textContent = latest ? createShadowSyncShortId(latest.revisionId) : 'pendent';
+  if (syncShadowBaseValueEl) syncShadowBaseValueEl.textContent = latest?.baseRevisionId ? createShadowSyncShortId(latest.baseRevisionId) : 'arrel';
+  if (syncShadowUpdatedValueEl) syncShadowUpdatedValueEl.textContent = formatShadowSyncMoment(state.lastQueuedAt);
+}
+
+async function clearShadowSyncHistory() {
+  if (!shadowSyncHistory.length) return;
+  openConfirm(
+    'Netejar shadow sync local?',
+    'Aixo esborrarà les revisions shadow guardades només en aquest dispositiu. No afectarà ni els documents actuals ni els backups normals.',
+    async () => {
+      shadowSyncHistory = [];
+      await writeShadowSyncHistory([]);
+      await writeShadowSyncState({
+        ...(shadowSyncState || {}),
+        status: docs.length ? 'idle' : 'empty',
+        lastRevisionId: '',
+        lastBaseRevisionId: '',
+        lastPayloadSignature: '',
+        lastQueuedAt: '',
+        lastReason: '',
+        lastError: '',
+        historyCount: 0
+      });
+      showToast('Historial local de shadow sync netejat.', 'info');
+    },
+    {
+      okLabel: 'Netejar shadow',
+      warningText: 'Aquesta operació només afecta el registre local de revisions preparades per al futur núvol.'
+    }
+  );
 }
 
 function updatePwaUI() {
@@ -5762,12 +6077,20 @@ async function applyPendingAppUpdate() {
   recentDocs = readRecentDocsHistory();
   renderRecentDocsHistory();
   ensureSyncPrepMeta();
+  shadowSyncHistory = await readShadowSyncHistory();
+  shadowSyncState = await readShadowSyncState();
   updateBackupStatusUI();
   updateAttachmentHealthUI();
   updateExternalBackupUI();
+  updateShadowSyncUI();
   await restorePersistedExternalBackupBinding();
   await restorePersistedWorkspaceBinding();
   refreshSyncPreparationState('bootstrap');
+  if (docs.length > 0 && shadowSyncHistory.length === 0) {
+    await createShadowRevisionNow('shadow-bootstrap-seed', { silent: true, force: false });
+  } else {
+    updateShadowSyncUI();
+  }
   await registerPwaSupport();
   updateQuickStartUI();
   updatePwaUI();
@@ -5853,6 +6176,29 @@ async function applyPendingAppUpdate() {
     triggerDownload(fileName, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
     showToast(`Payload base de sync preparat: ${fileName}`);
   });
+  forceShadowRevisionBtn?.addEventListener('click', () => {
+    createShadowRevisionNow('shadow-manual-forced', { silent: false, force: true });
+  });
+  exportShadowBundleBtn?.addEventListener('click', async () => {
+    if (!shadowSyncHistory.length) {
+      showToast('Encara no hi ha revisions shadow per exportar.', 'info');
+      return;
+    }
+    const bundle = createShadowSyncBundle();
+    const baseName = slugifyFileName(bundle.state.lastRevisionId ? (syncPrepState?.workspace?.name || 'sutsumu') : 'sutsumu');
+    const fileName = `${baseName}-shadow-sync-bundle-v1.json`;
+    triggerDownload(fileName, JSON.stringify(bundle, null, 2), 'application/json;charset=utf-8');
+    await writeShadowSyncState({
+      ...(shadowSyncState || {}),
+      enabled: true,
+      status: shadowSyncHistory.length ? 'ready' : 'idle',
+      lastExportedAt: new Date().toISOString(),
+      historyCount: shadowSyncHistory.length,
+      lastError: ''
+    });
+    showToast(`Bundle shadow exportat: ${fileName}`);
+  });
+  clearShadowHistoryBtn?.addEventListener('click', clearShadowSyncHistory);
   createWorkspaceBtn.addEventListener('click', () => createNewWorkspaceFile());
   openWorkspaceBtn.addEventListener('click', openExistingWorkspaceFile);
   saveWorkspaceBtn.addEventListener('click', saveWorkspace);
@@ -6213,6 +6559,7 @@ async function applyPendingAppUpdate() {
     updateExternalBackupUI();
     updateWorkspaceUI();
     queueSyncPreparationRefresh(reason);
+    queueShadowSyncRevision(reason);
   }
 
   // Togglers expansibles

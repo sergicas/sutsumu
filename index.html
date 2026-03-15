@@ -323,6 +323,41 @@
                 <div class="sync-prep-actions">
                   <button id="downloadSyncPayloadBtn" type="button" class="btn btn-secondary btn-small">Descarregar payload base</button>
                 </div>
+                <div class="sync-shadow-card">
+                  <div class="sync-shadow-header">
+                    <div>
+                      <div class="sync-prep-list-label">Shadow Sync Local</div>
+                      <p id="syncShadowStatusText" class="sync-prep-text">Preparant revisions immutables locals per al futur backend...</p>
+                    </div>
+                    <span id="syncShadowBadge" class="badge sync-prep-badge">Base</span>
+                  </div>
+                  <div class="sync-prep-grid">
+                    <div class="sync-prep-stat-card">
+                      <span class="sync-prep-stat-label">Revisions locals</span>
+                      <strong id="syncShadowQueueValue" class="sync-prep-stat-value">0</strong>
+                    </div>
+                    <div class="sync-prep-stat-card">
+                      <span class="sync-prep-stat-label">Head actual</span>
+                      <strong id="syncShadowHeadValue" class="sync-prep-stat-value">pendent</strong>
+                    </div>
+                    <div class="sync-prep-stat-card">
+                      <span class="sync-prep-stat-label">Base anterior</span>
+                      <strong id="syncShadowBaseValue" class="sync-prep-stat-value">arrel</strong>
+                    </div>
+                    <div class="sync-prep-stat-card">
+                      <span class="sync-prep-stat-label">Darrera revisió</span>
+                      <strong id="syncShadowUpdatedValue" class="sync-prep-stat-value">encara no</strong>
+                    </div>
+                  </div>
+                  <div class="sync-shadow-hint">
+                    Aquest historial shadow queda només al dispositiu i serveix per preparar una capa remota segura sense deixar que el núvol governi encara l'app.
+                  </div>
+                  <div class="sync-prep-actions">
+                    <button id="forceShadowRevisionBtn" type="button" class="btn btn-secondary btn-small">Forçar revisió shadow</button>
+                    <button id="exportShadowBundleBtn" type="button" class="btn btn-secondary btn-small">Exportar bundle shadow</button>
+                    <button id="clearShadowHistoryBtn" type="button" class="btn btn-danger-ghost btn-small">Netejar shadow</button>
+                  </div>
+                </div>
               </div>
               <div id="quickStartCard" class="quickstart-card hidden">
                 <div class="quickstart-header">

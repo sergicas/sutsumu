@@ -2001,6 +2001,30 @@ ul.doc-list {
   margin-top: 14px;
 }
 
+.sync-shadow-card {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.sync-shadow-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sync-shadow-hint {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  color: #475569;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 @media (max-width: 760px) {
   .sync-prep-grid,
   .sync-prep-lists {
