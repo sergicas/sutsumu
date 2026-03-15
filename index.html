@@ -281,6 +281,49 @@
                   <ul id="workspaceRecentList" class="workspace-recents-list"></ul>
                 </div>
               </div>
+              <div class="sync-prep-card">
+                <div class="sync-prep-header">
+                  <div>
+                    <div class="sync-prep-label">Cloud Sync v1</div>
+                    <p id="syncPrepStatusText" class="sync-prep-text">Preparant la capa local de sincronització segura...</p>
+                  </div>
+                  <span id="syncPrepBadge" class="badge sync-prep-badge">Preparant</span>
+                </div>
+                <div class="sync-prep-scope">
+                  Primera fase pensada per a <strong>1 usuari, diversos dispositius propis i 1 workspace principal</strong>. Encara no envia ni baixa dades del núvol.
+                </div>
+                <div class="sync-prep-grid">
+                  <div class="sync-prep-stat-card">
+                    <span class="sync-prep-stat-label">Workspace base</span>
+                    <strong id="syncPrepWorkspaceValue" class="sync-prep-stat-value">Carregant...</strong>
+                  </div>
+                  <div class="sync-prep-stat-card">
+                    <span class="sync-prep-stat-label">Dispositiu</span>
+                    <strong id="syncPrepDeviceValue" class="sync-prep-stat-value">Carregant...</strong>
+                  </div>
+                  <div class="sync-prep-stat-card">
+                    <span class="sync-prep-stat-label">Elements sync</span>
+                    <strong id="syncPrepCountsValue" class="sync-prep-stat-value">0</strong>
+                  </div>
+                  <div class="sync-prep-stat-card">
+                    <span class="sync-prep-stat-label">Signatura base</span>
+                    <strong id="syncPrepSignatureValue" class="sync-prep-stat-value">pendent</strong>
+                  </div>
+                </div>
+                <div class="sync-prep-lists">
+                  <div>
+                    <div class="sync-prep-list-label">Entrarà a la sync</div>
+                    <div id="syncPrepIncludedList" class="sync-prep-chip-list"></div>
+                  </div>
+                  <div>
+                    <div class="sync-prep-list-label">Continuarà local</div>
+                    <div id="syncPrepLocalOnlyList" class="sync-prep-chip-list"></div>
+                  </div>
+                </div>
+                <div class="sync-prep-actions">
+                  <button id="downloadSyncPayloadBtn" type="button" class="btn btn-secondary btn-small">Descarregar payload base</button>
+                </div>
+              </div>
               <div id="quickStartCard" class="quickstart-card hidden">
                 <div class="quickstart-header">
                   <div>

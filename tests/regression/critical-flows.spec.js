@@ -67,6 +67,39 @@ test('supports tags, quick filters and command palette navigation', async ({ pag
   await expect(page.locator('#editName')).toHaveValue(targetTitle);
 });
 
+test('exports a sync payload base without mixing in local-only state', async ({ page }, testInfo) => {
+  await gotoApp(page);
+
+  await page.locator('.tab-btn[data-target="tab-folder"]').click();
+  await page.locator('#folderName').fill('Regressio Sync Folder');
+  await page.locator('#addFolderBtn').click();
+  await expectToast(page, 'Carpeta creada');
+
+  await page.locator('.tab-btn[data-target="tab-document"]').click();
+  await createDocument(page, {
+    title: 'Regressio Sync Document',
+    content: 'Contingut per al payload base',
+    tags: 'sync, base'
+  });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#downloadSyncPayloadBtn').click();
+  await expectToast(page, 'Payload base de sync preparat');
+
+  const payloadPath = testInfo.outputPath('sync-payload-base.json');
+  const download = await downloadPromise;
+  await download.saveAs(payloadPath);
+
+  const payload = JSON.parse(require('fs').readFileSync(payloadPath, 'utf8'));
+  expect(payload.schema).toBe('sutsumu-cloud-sync-payload');
+  expect(payload.scope.workspaceMode).toBe('single-primary-workspace');
+  expect(payload.contract.syncableCollections).toContain('documents');
+  expect(payload.contract.localOnlyCollections).toContain('expandedFolders');
+  expect(payload.snapshot.docs.map(item => item.title)).toEqual(expect.arrayContaining(['Regressio Sync Folder', 'Regressio Sync Document']));
+  expect(Object.prototype.hasOwnProperty.call(payload.snapshot, 'expandedFolders')).toBe(false);
+  expect(Object.prototype.hasOwnProperty.call(payload, 'recentDocs')).toBe(false);
+});
+
 test('writes an automatic external backup and keeps the last good copy if the app becomes empty', async ({ page }) => {
   await installExternalBackupStub(page);
   await gotoApp(page);

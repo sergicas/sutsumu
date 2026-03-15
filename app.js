@@ -57,6 +57,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   const workspaceRecentListEl = document.getElementById('workspaceRecentList');
   const workspaceRecentEmptyEl = document.getElementById('workspaceRecentEmpty');
   const workspaceRecentCountEl = document.getElementById('workspaceRecentCount');
+  const syncPrepStatusTextEl = document.getElementById('syncPrepStatusText');
+  const syncPrepBadgeEl = document.getElementById('syncPrepBadge');
+  const syncPrepWorkspaceValueEl = document.getElementById('syncPrepWorkspaceValue');
+  const syncPrepDeviceValueEl = document.getElementById('syncPrepDeviceValue');
+  const syncPrepCountsValueEl = document.getElementById('syncPrepCountsValue');
+  const syncPrepSignatureValueEl = document.getElementById('syncPrepSignatureValue');
+  const syncPrepIncludedListEl = document.getElementById('syncPrepIncludedList');
+  const syncPrepLocalOnlyListEl = document.getElementById('syncPrepLocalOnlyList');
+  const downloadSyncPayloadBtn = document.getElementById('downloadSyncPayloadBtn');
   const recentDocsListEl = document.getElementById('recentDocsList');
   const recentDocsEmptyEl = document.getElementById('recentDocsEmpty');
   const recentDocsCountEl = document.getElementById('recentDocsCount');
@@ -223,6 +232,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   const SURVIVAL_ATTACHMENT_ITEM_MAX_BYTES = 320 * 1024;
   const SURVIVAL_ATTACHMENT_TOTAL_MAX_BYTES = 1400 * 1024;
   const SURVIVAL_ATTACHMENT_SYNC_DEBOUNCE_MS = 1200;
+  const SYNC_PAYLOAD_SCHEMA = 'sutsumu-cloud-sync-payload';
+  const SYNC_PAYLOAD_VERSION = 1;
+  const SYNC_PREP_META_KEY = 'sutsumu_sync_prep_meta_v1';
+  const SYNC_PREP_REFRESH_DEBOUNCE_MS = 900;
+  const SYNCABLE_COLLECTIONS = Object.freeze(['documents', 'folders', 'tags', 'versions', 'attachmentMetadata']);
+  const LOCAL_ONLY_COLLECTIONS = Object.freeze(['expandedFolders', 'recentDocs', 'recentWorkspaces', 'draftsLocals', 'backupHistories', 'workspaceHandles', 'uiState']);
+  const SYNCABLE_COLLECTION_LABELS = Object.freeze(['documents', 'carpetes', 'etiquetes', 'versions', "metadades d'adjunts"]);
+  const LOCAL_ONLY_COLLECTION_LABELS = Object.freeze(['carpetes obertes', 'recents del dispositiu', 'workspaces recents', 'esborranys locals', 'historial local de backups', 'permisos de fitxer', 'estat temporal UI']);
+  const SYNC_SCOPE_V1 = Object.freeze({
+    userMode: 'single-user',
+    deviceMode: 'multi-device-own',
+    workspaceMode: 'single-primary-workspace',
+    collaboration: 'disabled',
+    realtime: 'disabled'
+  });
   const WORKSPACE_SCHEMA = 'bento-workspace';
   const WORKSPACE_VERSION = 1;
   const WORKSPACE_META_KEY = 'bento_workspace_meta_v1';
@@ -280,6 +304,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   let survivalAttachmentMirrorSignature = '';
   let survivalAttachmentMirrorTimer = null;
   let hasWarnedAboutMissingAttachmentBinaries = false;
+  let syncPrepMeta = null;
+  let syncPrepState = null;
+  let syncPrepRefreshTimer = null;
   let workspaceAutosaveTimer = null;
   let isWorkspaceSaving = false;
   let workspaceLastSavedSignature = '';
@@ -421,6 +448,279 @@ function updatePwaDiagnostics() {
   if (pwaDiagUpdateEl) {
     pwaDiagUpdateEl.textContent = hasPendingAppUpdate ? 'pendent' : 'al dia';
   }
+}
+
+function normalizeSyncPrepMeta(rawMeta) {
+  const nowIso = new Date().toISOString();
+  const meta = rawMeta && typeof rawMeta === 'object' ? rawMeta : {};
+  return {
+    deviceId: typeof meta.deviceId === 'string' && meta.deviceId.trim() ? meta.deviceId.trim() : generateId('device'),
+    deviceLabel: typeof meta.deviceLabel === 'string' && meta.deviceLabel.trim() ? meta.deviceLabel.trim() : getSyncDeviceLabel(),
+    devicePlatform: typeof meta.devicePlatform === 'string' && meta.devicePlatform.trim() ? meta.devicePlatform.trim() : getSyncDevicePlatform(),
+    primaryWorkspaceId: typeof meta.primaryWorkspaceId === 'string' && meta.primaryWorkspaceId.trim() ? meta.primaryWorkspaceId.trim() : generateId('workspace'),
+    primaryWorkspaceName: typeof meta.primaryWorkspaceName === 'string' && meta.primaryWorkspaceName.trim() ? meta.primaryWorkspaceName.trim() : 'Sutsumu Principal',
+    lastWorkspaceMode: typeof meta.lastWorkspaceMode === 'string' && meta.lastWorkspaceMode.trim() ? meta.lastWorkspaceMode.trim() : 'local',
+    createdAt: typeof meta.createdAt === 'string' && !Number.isNaN(Date.parse(meta.createdAt)) ? meta.createdAt : nowIso,
+    lastPreparedAt: typeof meta.lastPreparedAt === 'string' && !Number.isNaN(Date.parse(meta.lastPreparedAt)) ? meta.lastPreparedAt : '',
+    lastPayloadSignature: typeof meta.lastPayloadSignature === 'string' ? meta.lastPayloadSignature : ''
+  };
+}
+
+function readSyncPrepMetaSnapshot() {
+  return safeJSONParse(localStorage.getItem(SYNC_PREP_META_KEY), null);
+}
+
+function writeSyncPrepMetaSnapshot(meta) {
+  try {
+    localStorage.setItem(SYNC_PREP_META_KEY, JSON.stringify(meta));
+  } catch (err) {
+    console.warn("No s'ha pogut persistir la meta local de preparació de sync.", err);
+  }
+}
+
+function ensureSyncPrepMeta(partial = null) {
+  const base = normalizeSyncPrepMeta(syncPrepMeta || readSyncPrepMetaSnapshot());
+  const merged = normalizeSyncPrepMeta(partial ? { ...base, ...partial } : base);
+  const previousSerialized = JSON.stringify(syncPrepMeta || {});
+  const nextSerialized = JSON.stringify(merged);
+  syncPrepMeta = merged;
+  if (previousSerialized !== nextSerialized || !localStorage.getItem(SYNC_PREP_META_KEY)) {
+    writeSyncPrepMetaSnapshot(merged);
+  }
+  return merged;
+}
+
+function getSyncDevicePlatform() {
+  if (isIOSLikeDevice()) return isStandaloneDisplayMode() ? 'ios-standalone' : 'ios-web';
+  if (/Mac/i.test(navigator.platform || '')) return isStandaloneDisplayMode() ? 'mac-standalone' : 'mac-web';
+  if (/Win/i.test(navigator.platform || '')) return 'windows-web';
+  return 'web';
+}
+
+function getSyncDeviceLabel() {
+  if (isIOSLikeDevice()) return isStandaloneDisplayMode() ? 'iPhone/iPad app' : 'iPhone/iPad web';
+  if (/Mac/i.test(navigator.platform || '')) return isStandaloneDisplayMode() ? 'Mac app' : 'Mac web';
+  if (/Win/i.test(navigator.platform || '')) return 'Windows web';
+  return 'Navegador web';
+}
+
+function getSyncWorkspaceDescriptor() {
+  const meta = ensureSyncPrepMeta({
+    deviceLabel: getSyncDeviceLabel(),
+    devicePlatform: getSyncDevicePlatform()
+  });
+  const workspaceName = normalizeWorkspaceName(
+    workspaceMeta?.name
+      || meta.primaryWorkspaceName
+      || (docs.find(item => item.type === 'folder' && item.parentId === 'root' && !item.isDeleted)?.title || 'Sutsumu Principal')
+  );
+  const workspaceId = typeof workspaceMeta?.id === 'string' && workspaceMeta.id.trim()
+    ? workspaceMeta.id.trim()
+    : meta.primaryWorkspaceId;
+  const bindingMode = isWorkspaceConnected() ? 'fs' : (isPortableWorkspaceMode() ? 'portable' : 'local');
+  const nextMeta = {
+    ...meta,
+    primaryWorkspaceId: workspaceId,
+    primaryWorkspaceName: workspaceName,
+    lastWorkspaceMode: bindingMode
+  };
+  syncPrepMeta = nextMeta;
+  writeSyncPrepMetaSnapshot(nextMeta);
+  return {
+    id: workspaceId,
+    name: workspaceName,
+    bindingMode,
+    source: bindingMode === 'local' ? 'local-state' : 'workspace-file'
+  };
+}
+
+function createFastStateHash(value = '') {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `v1-${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+function buildSyncVersionPayload(version) {
+  return {
+    id: version.id,
+    createdAt: version.createdAt,
+    title: version.title || '',
+    category: version.category || '',
+    tags: normalizeTags(version.tags),
+    content: sanitizeRichText(version.content || ''),
+    reason: version.reason || 'manual-save'
+  };
+}
+
+function buildSyncAttachmentMetadata(item) {
+  const hasAttachment = Boolean(item.fileName || item.fileType || Number(item.fileSize || 0) > 0 || item.sourceFormat || item.binaryFileUnavailable);
+  if (!hasAttachment) return null;
+  return {
+    fileName: item.fileName || '',
+    fileType: item.fileType || '',
+    fileSize: Number(item.fileSize || 0),
+    sourceFormat: item.sourceFormat || '',
+    checksum: null,
+    remoteObjectKey: null,
+    availability: item.binaryFileUnavailable ? 'missing-local-copy' : 'local-pending-upload'
+  };
+}
+
+function buildSyncItemPayload(item) {
+  const base = {
+    id: item.id,
+    type: item.type,
+    parentId: item.parentId || 'root',
+    title: item.title || '',
+    tags: normalizeTags(item.tags),
+    timestamp: item.timestamp || '',
+    isDeleted: Boolean(item.isDeleted),
+    isFavorite: Boolean(item.isFavorite),
+    isPinned: Boolean(item.isPinned)
+  };
+
+  if (item.type === 'folder') {
+    return {
+      ...base,
+      desc: item.desc || '',
+      color: item.color || '#0ea5e9'
+    };
+  }
+
+  return {
+    ...base,
+    category: item.category || '',
+    content: sanitizeRichText(item.content || ''),
+    versions: normalizeVersions(item.versions || []).map(buildSyncVersionPayload),
+    attachment: buildSyncAttachmentMetadata(item)
+  };
+}
+
+function createSyncPayloadCounts(syncDocs) {
+  const folders = syncDocs.filter(item => item.type === 'folder' && !item.isDeleted).length;
+  const documents = syncDocs.filter(item => item.type === 'document' && !item.isDeleted).length;
+  const deleted = syncDocs.filter(item => item.isDeleted).length;
+  const versions = syncDocs.reduce((total, item) => total + (item.type === 'document' ? item.versions.length : 0), 0);
+  const attachments = syncDocs.filter(item => item.type === 'document' && item.attachment).length;
+  return {
+    folders,
+    documents,
+    deleted,
+    versions,
+    attachments,
+    total: syncDocs.length
+  };
+}
+
+function createSyncPayloadPreview(currentDocs = docs) {
+  const workspace = getSyncWorkspaceDescriptor();
+  const meta = ensureSyncPrepMeta();
+  const syncDocs = normalizeDocs(currentDocs).map(buildSyncItemPayload);
+  return {
+    schema: SYNC_PAYLOAD_SCHEMA,
+    version: SYNC_PAYLOAD_VERSION,
+    mode: 'preparation-only',
+    generatedAt: new Date().toISOString(),
+    app: 'Sutsumu',
+    appVersion: APP_VERSION,
+    appRelease: APP_RELEASE_LABEL,
+    scope: { ...SYNC_SCOPE_V1 },
+    contract: {
+      syncableCollections: [...SYNCABLE_COLLECTIONS],
+      localOnlyCollections: [...LOCAL_ONLY_COLLECTIONS],
+      attachmentMode: 'metadata-only-until-cloud-v1'
+    },
+    device: {
+      id: meta.deviceId,
+      label: meta.deviceLabel,
+      platform: meta.devicePlatform
+    },
+    workspace,
+    snapshot: {
+      counts: createSyncPayloadCounts(syncDocs),
+      docs: syncDocs
+    }
+  };
+}
+
+function createSyncPayloadSignature(payload) {
+  const signatureBase = JSON.stringify({
+    schema: payload.schema,
+    version: payload.version,
+    workspace: payload.workspace,
+    docs: payload.snapshot.docs
+  });
+  return createFastStateHash(signatureBase);
+}
+
+function renderSyncPreparationChipList(container, items, variant = 'sync') {
+  if (!container) return;
+  container.innerHTML = '';
+  items.forEach(label => {
+    const chip = document.createElement('span');
+    chip.className = `sync-prep-chip ${variant === 'local' ? 'local-only' : ''}`;
+    chip.textContent = label;
+    container.appendChild(chip);
+  });
+}
+
+function updateSyncPreparationUI() {
+  if (!syncPrepStatusTextEl || !syncPrepBadgeEl) return;
+  const state = syncPrepState;
+  if (!state) {
+    syncPrepStatusTextEl.textContent = 'Preparant la capa local de Cloud Sync v1...';
+    syncPrepBadgeEl.textContent = 'Preparant';
+    return;
+  }
+
+  const modeLabel = state.workspace.bindingMode === 'fs'
+    ? 'workspace extern'
+    : (state.workspace.bindingMode === 'portable' ? 'workspace portable' : 'estat local');
+  syncPrepStatusTextEl.textContent = `Sutsumu ja genera un payload base net per al núvol a partir de ${modeLabel}. Aquesta fase encara no envia ni baixa dades remotes.`;
+  syncPrepBadgeEl.textContent = state.counts.total > 0 ? 'Preparat' : 'Base';
+  if (syncPrepWorkspaceValueEl) syncPrepWorkspaceValueEl.textContent = state.workspace.name || 'Sutsumu Principal';
+  if (syncPrepDeviceValueEl) syncPrepDeviceValueEl.textContent = `${state.device.label} · ${state.device.id.slice(0, 8)}`;
+  if (syncPrepCountsValueEl) {
+    syncPrepCountsValueEl.textContent = `${state.counts.documents} doc · ${state.counts.folders} carp · ${state.counts.versions} vers.`;
+  }
+  if (syncPrepSignatureValueEl) syncPrepSignatureValueEl.textContent = state.signature;
+  renderSyncPreparationChipList(syncPrepIncludedListEl, SYNCABLE_COLLECTION_LABELS, 'sync');
+  renderSyncPreparationChipList(syncPrepLocalOnlyListEl, LOCAL_ONLY_COLLECTION_LABELS, 'local');
+}
+
+function refreshSyncPreparationState(reason = 'local-change') {
+  const payload = createSyncPayloadPreview();
+  const signature = createSyncPayloadSignature(payload);
+  const nextMeta = ensureSyncPrepMeta({
+    deviceLabel: payload.device.label,
+    devicePlatform: payload.device.platform,
+    primaryWorkspaceId: payload.workspace.id,
+    primaryWorkspaceName: payload.workspace.name,
+    lastWorkspaceMode: payload.workspace.bindingMode,
+    lastPreparedAt: new Date().toISOString(),
+    lastPayloadSignature: signature
+  });
+  syncPrepState = {
+    reason,
+    signature,
+    device: payload.device,
+    workspace: payload.workspace,
+    counts: payload.snapshot.counts,
+    meta: nextMeta
+  };
+  updateSyncPreparationUI();
+  return payload;
+}
+
+function queueSyncPreparationRefresh(reason = 'local-change') {
+  if (syncPrepRefreshTimer) clearTimeout(syncPrepRefreshTimer);
+  syncPrepRefreshTimer = setTimeout(() => {
+    syncPrepRefreshTimer = null;
+    refreshSyncPreparationState(reason);
+  }, reason === 'bootstrap' ? 0 : SYNC_PREP_REFRESH_DEBOUNCE_MS);
 }
 
 function updatePwaUI() {
@@ -2600,6 +2900,7 @@ async function applyPendingAppUpdate() {
     workspaceDirty = false;
     await persistWorkspaceBinding();
     updateWorkspaceUI();
+    queueSyncPreparationRefresh('workspace-bind');
   }
 
   async function bindPortableWorkspace(meta = null) {
@@ -2615,6 +2916,7 @@ async function applyPendingAppUpdate() {
     workspaceDirty = false;
     await persistWorkspaceBinding();
     updateWorkspaceUI();
+    queueSyncPreparationRefresh('workspace-bind');
   }
 
   async function disconnectWorkspace(options = {}) {
@@ -2629,6 +2931,7 @@ async function applyPendingAppUpdate() {
     }
     await persistWorkspaceBinding();
     updateWorkspaceUI();
+    queueSyncPreparationRefresh('workspace-disconnect');
     if (!silent) showToast('Workspace desconnectat. Sutsumu continua en mode local.');
   }
 
@@ -2691,6 +2994,7 @@ async function applyPendingAppUpdate() {
       await persistWorkspaceBinding();
       await rememberRecentWorkspace(payload, { mode: 'portable', source: reason, fileName });
       updateWorkspaceUI();
+      queueSyncPreparationRefresh('workspace-save');
       if (!silent) {
         showToast(exportedViaShare
           ? "Workspace enviat a Compartir. Desa'l a Fitxers/iCloud sobre el mateix fitxer per sincronitzar-lo."
@@ -2740,6 +3044,7 @@ async function applyPendingAppUpdate() {
       await persistWorkspaceBinding();
       await rememberRecentWorkspace(payload, { mode: 'fs', source: reason, fileName: workspaceHandle?.name || getWorkspaceSuggestedFilename() });
       updateWorkspaceUI();
+      queueSyncPreparationRefresh('workspace-save');
       if (!silent) showToast(`Workspace desat: ${workspaceMeta.name}`);
       return true;
     } catch (err) {
@@ -2776,6 +3081,7 @@ async function applyPendingAppUpdate() {
   async function restorePersistedWorkspaceBinding() {
     if (!getMainStore()) {
       updateWorkspaceUI();
+      queueSyncPreparationRefresh('workspace-restore');
       return;
     }
 
@@ -2804,6 +3110,7 @@ async function applyPendingAppUpdate() {
     }
 
     updateWorkspaceUI();
+    queueSyncPreparationRefresh('workspace-restore');
   }
 
   async function openWorkspaceFromFileBlob(file, options = {}) {
@@ -5454,11 +5761,13 @@ async function applyPendingAppUpdate() {
   renderRecentWorkspaces();
   recentDocs = readRecentDocsHistory();
   renderRecentDocsHistory();
+  ensureSyncPrepMeta();
   updateBackupStatusUI();
   updateAttachmentHealthUI();
   updateExternalBackupUI();
   await restorePersistedExternalBackupBinding();
   await restorePersistedWorkspaceBinding();
+  refreshSyncPreparationState('bootstrap');
   await registerPwaSupport();
   updateQuickStartUI();
   updatePwaUI();
@@ -5537,6 +5846,12 @@ async function applyPendingAppUpdate() {
       console.error(err);
       showToast("No s'ha pogut generar el ZIP segur.", 'error');
     }
+  });
+  downloadSyncPayloadBtn?.addEventListener('click', () => {
+    const payload = refreshSyncPreparationState('manual-export');
+    const fileName = `${slugifyFileName(payload.workspace.name || 'sutsumu')}-sync-payload-v1.json`;
+    triggerDownload(fileName, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
+    showToast(`Payload base de sync preparat: ${fileName}`);
   });
   createWorkspaceBtn.addEventListener('click', () => createNewWorkspaceFile());
   openWorkspaceBtn.addEventListener('click', openExistingWorkspaceFile);
@@ -5897,6 +6212,7 @@ async function applyPendingAppUpdate() {
     updateAttachmentHealthUI();
     updateExternalBackupUI();
     updateWorkspaceUI();
+    queueSyncPreparationRefresh(reason);
   }
 
   // Togglers expansibles
