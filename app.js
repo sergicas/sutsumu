@@ -40,6 +40,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const saveExternalBackupBtn = document.getElementById('saveExternalBackupBtn');
   const disconnectExternalBackupBtn = document.getElementById('disconnectExternalBackupBtn');
   const externalBackupHintEl = document.getElementById('externalBackupHint');
+  const attachmentHealthTextEl = document.getElementById('attachmentHealthText');
+  const attachmentHealthBadgeEl = document.getElementById('attachmentHealthBadge');
+  const exportSafeZipBtn = document.getElementById('exportSafeZipBtn');
+  const attachmentHealthHintEl = document.getElementById('attachmentHealthHint');
   const workspaceStatusTextEl = document.getElementById('workspaceStatusText');
   const workspaceModeBadgeEl = document.getElementById('workspaceModeBadge');
   const createWorkspaceBtn = document.getElementById('createWorkspaceBtn');
@@ -215,6 +219,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const EXTERNAL_BACKUP_HANDLE_KEY = 'sutsumu_external_backup_handle_v1';
   const EXTERNAL_BACKUP_META_MIRROR_KEY = 'sutsumu_external_backup_meta_local_v1';
   const EXTERNAL_BACKUP_DEBOUNCE_MS = 3500;
+  const SURVIVAL_ATTACHMENT_MIRROR_KEY = 'sutsumu_survival_attachment_mirror_v1';
+  const SURVIVAL_ATTACHMENT_ITEM_MAX_BYTES = 320 * 1024;
+  const SURVIVAL_ATTACHMENT_TOTAL_MAX_BYTES = 1400 * 1024;
+  const SURVIVAL_ATTACHMENT_SYNC_DEBOUNCE_MS = 1200;
   const WORKSPACE_SCHEMA = 'bento-workspace';
   const WORKSPACE_VERSION = 1;
   const WORKSPACE_META_KEY = 'bento_workspace_meta_v1';
@@ -268,6 +276,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   let externalBackupDirty = false;
   let externalBackupNeedsPermission = false;
   let isExternalBackupSaving = false;
+  let survivalAttachmentMirrorCache = null;
+  let survivalAttachmentMirrorSignature = '';
+  let survivalAttachmentMirrorTimer = null;
+  let hasWarnedAboutMissingAttachmentBinaries = false;
   let workspaceAutosaveTimer = null;
   let isWorkspaceSaving = false;
   let workspaceLastSavedSignature = '';
@@ -684,6 +696,238 @@ async function applyPendingAppUpdate() {
       ? getWorkspaceDisplayName()
       : (docs.find(item => item.type === 'folder' && !item.isDeleted)?.title || 'sutsumu');
     return `${slugifyFileName(baseName)}-backup-automatic.json`;
+  }
+
+  function formatBytes(bytes = 0) {
+    const value = Number(bytes || 0);
+    if (!Number.isFinite(value) || value <= 0) return '0 B';
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(value >= 10 * 1024 ? 0 : 1)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(value >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  }
+
+  function isBinaryAttachmentDocument(item) {
+    return Boolean(
+      item
+      && item.type === 'document'
+      && !item.isDeleted
+      && (
+        isRealBlob(item.fileBlob)
+        || item.fileName
+        || item.fileType
+        || item.binaryFileUnavailable
+      )
+    );
+  }
+
+  function getAttachmentDocuments(currentDocs = docs) {
+    return normalizeDocs(currentDocs).filter(isBinaryAttachmentDocument);
+  }
+
+  function createSurvivalAttachmentMirrorSignature(currentDocs = docs) {
+    return JSON.stringify(getAttachmentDocuments(currentDocs).map(item => ({
+      id: item.id,
+      fileName: item.fileName || '',
+      fileType: item.fileType || '',
+      fileSize: Number(item.fileSize || (isRealBlob(item.fileBlob) ? item.fileBlob.size : 0) || 0),
+      binaryFileUnavailable: Boolean(item.binaryFileUnavailable),
+      hasBlob: isRealBlob(item.fileBlob),
+      timestamp: item.timestamp || ''
+    })));
+  }
+
+  function normalizeSurvivalAttachmentMirrorSnapshot(rawSnapshot) {
+    if (!rawSnapshot || typeof rawSnapshot !== 'object') return { createdAt: '', totalBytes: 0, entries: [] };
+    const entries = Array.isArray(rawSnapshot.entries)
+      ? rawSnapshot.entries
+          .filter(entry => entry && typeof entry === 'object' && typeof entry.id === 'string' && entry.id.trim() && typeof entry.dataUrl === 'string' && entry.dataUrl.startsWith('data:'))
+          .map(entry => ({
+            id: entry.id.trim(),
+            fileName: typeof entry.fileName === 'string' ? entry.fileName : '',
+            fileType: typeof entry.fileType === 'string' ? entry.fileType : 'application/octet-stream',
+            size: Number(entry.size || 0),
+            dataUrl: entry.dataUrl,
+            savedAt: typeof entry.savedAt === 'string' ? entry.savedAt : ''
+          }))
+      : [];
+    return {
+      createdAt: typeof rawSnapshot.createdAt === 'string' ? rawSnapshot.createdAt : '',
+      totalBytes: Number(rawSnapshot.totalBytes || entries.reduce((total, entry) => total + Number(entry.size || 0), 0)),
+      entries
+    };
+  }
+
+  function readSurvivalAttachmentMirrorSnapshot() {
+    return normalizeSurvivalAttachmentMirrorSnapshot(safeJSONParse(localStorage.getItem(SURVIVAL_ATTACHMENT_MIRROR_KEY), null));
+  }
+
+  function writeSurvivalAttachmentMirrorSnapshot(snapshot) {
+    let normalized = normalizeSurvivalAttachmentMirrorSnapshot(snapshot);
+    while (true) {
+      try {
+        if (normalized.entries.length === 0) {
+          localStorage.removeItem(SURVIVAL_ATTACHMENT_MIRROR_KEY);
+        } else {
+          localStorage.setItem(SURVIVAL_ATTACHMENT_MIRROR_KEY, JSON.stringify(normalized));
+        }
+        survivalAttachmentMirrorCache = normalized;
+        survivalAttachmentMirrorSignature = createSurvivalAttachmentMirrorSignature(docs);
+        return normalized;
+      } catch (err) {
+        if (!isQuotaExceededError(err) || normalized.entries.length === 0) {
+          console.warn("No s'ha pogut actualitzar el mirall local d'adjunts lleugers.", err);
+          return survivalAttachmentMirrorCache || normalizeSurvivalAttachmentMirrorSnapshot(null);
+        }
+        normalized = {
+          ...normalized,
+          entries: normalized.entries.slice(0, -1),
+          totalBytes: normalized.entries.slice(0, -1).reduce((total, entry) => total + Number(entry.size || 0), 0)
+        };
+      }
+    }
+  }
+
+  async function buildSurvivalAttachmentMirrorSnapshot(currentDocs = docs) {
+    const attachmentDocs = getAttachmentDocuments(currentDocs)
+      .filter(item => isRealBlob(item.fileBlob))
+      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+    let totalBytes = 0;
+    const entries = [];
+
+    for (const item of attachmentDocs) {
+      const blob = item.fileBlob;
+      const fileSize = Number(item.fileSize || blob.size || 0);
+      if (!blob || fileSize <= 0 || fileSize > SURVIVAL_ATTACHMENT_ITEM_MAX_BYTES) continue;
+      if (totalBytes + fileSize > SURVIVAL_ATTACHMENT_TOTAL_MAX_BYTES) continue;
+      const dataUrl = await blobToDataUrl(blob);
+      if (!dataUrl) continue;
+      entries.push({
+        id: item.id,
+        fileName: item.fileName || '',
+        fileType: item.fileType || blob.type || 'application/octet-stream',
+        size: fileSize,
+        dataUrl,
+        savedAt: new Date().toISOString()
+      });
+      totalBytes += fileSize;
+    }
+
+    return normalizeSurvivalAttachmentMirrorSnapshot({
+      createdAt: new Date().toISOString(),
+      totalBytes,
+      entries
+    });
+  }
+
+  function hydrateDocsWithSurvivalAttachmentMirror(rawDocs, mirrorSnapshot = survivalAttachmentMirrorCache) {
+    const normalizedMirror = normalizeSurvivalAttachmentMirrorSnapshot(mirrorSnapshot);
+    if (!normalizedMirror.entries.length) return normalizeDocs(rawDocs || []);
+
+    const mirrorMap = new Map(normalizedMirror.entries.map(entry => [entry.id, entry]));
+    const hydratedRawDocs = Array.isArray(rawDocs) ? rawDocs.map(item => ({ ...item })) : [];
+
+    hydratedRawDocs.forEach(item => {
+      if (!item || item.type !== 'document') return;
+      const mirrorEntry = mirrorMap.get(item.id);
+      if (!mirrorEntry || isRealBlob(item.fileBlob)) return;
+      const blob = dataUrlToBlob(mirrorEntry.dataUrl, mirrorEntry.fileType || item.fileType || 'application/octet-stream');
+      if (!blob) return;
+      item.fileBlob = blob;
+      item.fileType = item.fileType || mirrorEntry.fileType || '';
+      item.fileName = item.fileName || mirrorEntry.fileName || '';
+      item.fileSize = Number(item.fileSize || mirrorEntry.size || blob.size || 0);
+      item.binaryFileUnavailable = false;
+    });
+
+    return normalizeDocs(hydratedRawDocs);
+  }
+
+  function getAttachmentProtectionStats(currentDocs = docs, mirrorSnapshot = survivalAttachmentMirrorCache) {
+    const attachmentDocs = getAttachmentDocuments(currentDocs);
+    const normalizedMirror = normalizeSurvivalAttachmentMirrorSnapshot(mirrorSnapshot);
+    const mirrorIds = new Set(normalizedMirror.entries.map(entry => entry.id));
+
+    const total = attachmentDocs.length;
+    const available = attachmentDocs.filter(item => isRealBlob(item.fileBlob)).length;
+    const missing = attachmentDocs.filter(item => item.binaryFileUnavailable && !isRealBlob(item.fileBlob)).length;
+    const protectedBySurvival = attachmentDocs.filter(item => mirrorIds.has(item.id)).length;
+    const totalBytes = attachmentDocs.reduce((totalBytesAcc, item) => totalBytesAcc + Number(item.fileSize || (isRealBlob(item.fileBlob) ? item.fileBlob.size : 0) || 0), 0);
+    const heavy = attachmentDocs.filter(item => Number(item.fileSize || (isRealBlob(item.fileBlob) ? item.fileBlob.size : 0) || 0) > SURVIVAL_ATTACHMENT_ITEM_MAX_BYTES).length;
+
+    return {
+      total,
+      available,
+      missing,
+      protectedBySurvival,
+      totalBytes,
+      heavy,
+      mirroredBytes: normalizedMirror.totalBytes || 0
+    };
+  }
+
+  function updateAttachmentHealthUI() {
+    if (!attachmentHealthTextEl || !attachmentHealthBadgeEl || !exportSafeZipBtn) return;
+
+    const stats = getAttachmentProtectionStats(docs, survivalAttachmentMirrorCache);
+    exportSafeZipBtn.disabled = docs.length === 0;
+
+    if (attachmentHealthHintEl) {
+      attachmentHealthHintEl.textContent = stats.total > 0
+        ? `Hi ha ${stats.total} adjunts binaris (${formatBytes(stats.totalBytes)}). ${stats.protectedBySurvival} es poden reconstruir també des de la supervivència local; la resta depenen d'un backup complet, workspace o backup extern.`
+        : "Els adjunts petits poden quedar també reflectits en la còpia local de supervivència. Els adjunts grans continuen requerint un backup complet, un workspace o un backup extern.";
+    }
+
+    if (stats.total === 0) {
+      attachmentHealthBadgeEl.textContent = '0';
+      attachmentHealthTextEl.textContent = "No hi ha adjunts binaris en aquesta col·lecció. Les notes i carpetes ja queden cobertes pel sistema de supervivència local.";
+      return;
+    }
+
+    if (stats.missing > 0) {
+      attachmentHealthBadgeEl.textContent = 'Risc';
+      attachmentHealthTextEl.textContent = `Hi ha ${stats.missing} adjunts que ja no tenen el fitxer binari original en aquest dispositiu. Recupera'ls des d'un backup complet, workspace o backup extern on encara existeixin.`;
+      return;
+    }
+
+    if (stats.protectedBySurvival === stats.total) {
+      attachmentHealthBadgeEl.textContent = 'Local+';
+      attachmentHealthTextEl.textContent = `Els ${stats.total} adjunts actuals també tenen una còpia de supervivència local. Encara així, mantén un backup complet fora del navegador per seguretat forta.`;
+      return;
+    }
+
+    attachmentHealthBadgeEl.textContent = stats.heavy > 0 ? 'Mixt' : 'Parcial';
+    attachmentHealthTextEl.textContent = `${stats.protectedBySurvival} de ${stats.total} adjunts també es poden recuperar des de la supervivència local. ${stats.total - stats.protectedBySurvival} adjunts${stats.heavy > 0 ? ' pesants' : ''} continuen depenent d'un backup complet, workspace o backup extern.`;
+  }
+
+  function maybeWarnAboutMissingAttachmentBinaries() {
+    if (hasWarnedAboutMissingAttachmentBinaries) return;
+    const stats = getAttachmentProtectionStats(docs, survivalAttachmentMirrorCache);
+    if (stats.missing > 0) {
+      hasWarnedAboutMissingAttachmentBinaries = true;
+      showToast(`Atenció: hi ha ${stats.missing} adjunts sense binari recuperable en aquest dispositiu.`, 'info');
+    }
+  }
+
+  function queueSurvivalAttachmentMirrorSync() {
+    const nextSignature = createSurvivalAttachmentMirrorSignature(docs);
+    if (nextSignature === survivalAttachmentMirrorSignature) {
+      updateAttachmentHealthUI();
+      return;
+    }
+
+    if (survivalAttachmentMirrorTimer) clearTimeout(survivalAttachmentMirrorTimer);
+    survivalAttachmentMirrorTimer = setTimeout(async () => {
+      survivalAttachmentMirrorTimer = null;
+      const latestSignature = createSurvivalAttachmentMirrorSignature(docs);
+      if (latestSignature === survivalAttachmentMirrorSignature) {
+        updateAttachmentHealthUI();
+        return;
+      }
+      const snapshot = await buildSurvivalAttachmentMirrorSnapshot(docs);
+      writeSurvivalAttachmentMirrorSnapshot(snapshot);
+      updateAttachmentHealthUI();
+    }, SURVIVAL_ATTACHMENT_SYNC_DEBOUNCE_MS);
   }
 
   function isPortableWorkspaceMode() {
@@ -3382,6 +3626,7 @@ async function applyPendingAppUpdate() {
         fileBlob: null,
         fileType: '',
         fileName: '',
+        fileSize: 0,
         sourceFormat: ''
       };
     }
@@ -3393,6 +3638,7 @@ async function applyPendingAppUpdate() {
         fileBlob: file,
         fileType: file.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         fileName: file.name,
+        fileSize: Number(file.size || 0),
         sourceFormat: 'docx'
       };
     }
@@ -3403,6 +3649,7 @@ async function applyPendingAppUpdate() {
       fileBlob: file,
       fileType: file.type || '',
       fileName: file.name || '',
+      fileSize: Number(file.size || 0),
       sourceFormat: isLegacyWordFile(file) ? 'doc' : ''
     };
   }
@@ -4437,6 +4684,7 @@ async function applyPendingAppUpdate() {
       'light-recovery-restore': 'Recuperació de còpia local',
       'external-auto-backup': 'Backup extern automàtic',
       'external-manual-backup': 'Backup extern manual',
+      'manual-export-zip': 'Exportació ZIP segura',
       'restore-full-history': "Restauració d'un backup intern"
     };
     return labels[reason] || `Canvi desat (${reason})`;
@@ -4788,6 +5036,7 @@ async function applyPendingAppUpdate() {
           fileBlob: hasBlob ? item.fileBlob : null,
           fileType: typeof item.fileType === 'string' ? item.fileType : '',
           fileName: typeof item.fileName === 'string' ? item.fileName : '',
+          fileSize: Number(item.fileSize || (hasBlob ? item.fileBlob.size : 0) || 0),
           sourceFormat: typeof item.sourceFormat === 'string' ? item.sourceFormat : '',
           binaryFileUnavailable: Boolean(item.binaryFileUnavailable || (!hasBlob && (item.fileName || item.fileType))),
           isFavorite: Boolean(item.isFavorite),
@@ -5169,6 +5418,8 @@ async function applyPendingAppUpdate() {
 
   const lightBackupHistory = await readLightBackupHistory();
   const recoveryVaultSnapshot = await readRecoveryVaultSnapshot();
+  survivalAttachmentMirrorCache = readSurvivalAttachmentMirrorSnapshot();
+  survivalAttachmentMirrorSignature = createSurvivalAttachmentMirrorSignature(docs);
   if (docs.length === 0) {
     pendingRecoveryVaultSnapshot = recoveryVaultSnapshot && Array.isArray(recoveryVaultSnapshot.payload?.docs) && recoveryVaultSnapshot.payload.docs.length > 0
       && sessionStorage.getItem(DISMISSED_RECOVERY_VAULT_SESSION_KEY) !== recoveryVaultSnapshot.id
@@ -5204,6 +5455,7 @@ async function applyPendingAppUpdate() {
   recentDocs = readRecentDocsHistory();
   renderRecentDocsHistory();
   updateBackupStatusUI();
+  updateAttachmentHealthUI();
   updateExternalBackupUI();
   await restorePersistedExternalBackupBinding();
   await restorePersistedWorkspaceBinding();
@@ -5211,6 +5463,7 @@ async function applyPendingAppUpdate() {
   updateQuickStartUI();
   updatePwaUI();
   maybeWarnAboutStaleBackups();
+  maybeWarnAboutMissingAttachmentBinaries();
 
   if (window.location.protocol === 'file:' && !sessionStorage.getItem('bento_file_protocol_warning_shown')) {
     showToast('Executar Sutsumu amb file:// pot separar les dades si canvies de carpeta. Per més seguretat, usa sempre la mateixa ruta o un servidor local.', 'info');
@@ -5242,7 +5495,7 @@ async function applyPendingAppUpdate() {
       'Recuperar la còpia local de supervivència?',
       `He trobat una còpia local de supervivència del ${new Date(snapshot.createdAt).toLocaleString('ca-ES')}. Si continues, recuperaré carpetes i documents recents encara que IndexedDB s'hagi fet malbé.`,
       async () => {
-        docs = normalizeDocs(snapshot.docs || []);
+        docs = hydrateDocsWithSurvivalAttachmentMirror(snapshot.docs || [], survivalAttachmentMirrorCache);
         expandedFolders = normalizeExpandedFolders(snapshot.expandedFolders || [], docs);
         await saveData('light-recovery-restore');
         renderData();
@@ -5269,6 +5522,22 @@ async function applyPendingAppUpdate() {
   connectExternalBackupBtn?.addEventListener('click', connectExternalBackupFile);
   saveExternalBackupBtn?.addEventListener('click', () => saveExternalBackupToHandle('external-manual-backup', { silent: false, force: true, interactive: true }));
   disconnectExternalBackupBtn?.addEventListener('click', disconnectExternalBackup);
+  exportSafeZipBtn?.addEventListener('click', async () => {
+    if (docs.length === 0) {
+      showToast('No hi ha res a exportar.', 'error');
+      return;
+    }
+    try {
+      const payload = await createFullBackupPayload('manual-export-zip');
+      const archiveBlob = await createCompressedBackupArchive(payload);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      triggerDownload(`sutsumu_backup_complet_${timestamp}.zip`, archiveBlob, 'application/zip');
+      showToast('ZIP segur exportat amb carpetes, versions i fitxers adjunts.');
+    } catch (err) {
+      console.error(err);
+      showToast("No s'ha pogut generar el ZIP segur.", 'error');
+    }
+  });
   createWorkspaceBtn.addEventListener('click', () => createNewWorkspaceFile());
   openWorkspaceBtn.addEventListener('click', openExistingWorkspaceFile);
   saveWorkspaceBtn.addEventListener('click', saveWorkspace);
@@ -5617,6 +5886,7 @@ async function applyPendingAppUpdate() {
     }
 
     await saveLightBackupSnapshot(reason);
+    queueSurvivalAttachmentMirrorSync();
     updateTargetSelects();
     queueAutomaticFullBackup(reason);
     queueExternalBackupAutosave(reason);
@@ -5624,6 +5894,7 @@ async function applyPendingAppUpdate() {
       queueWorkspaceAutosave(reason);
     }
     updateBackupStatusUI();
+    updateAttachmentHealthUI();
     updateExternalBackupUI();
     updateWorkspaceUI();
   }
@@ -5703,14 +5974,15 @@ async function applyPendingAppUpdate() {
             type: 'document',
             title: preparedUpload.title || file.name,
             category: 'Sense categoria',
-            content: preparedUpload.content || '',
-            versions: [],
-            fileBlob: preparedUpload.fileBlob || null,
-            fileType: preparedUpload.fileType || '',
-            fileName: preparedUpload.fileName || '',
-            sourceFormat: preparedUpload.sourceFormat || '',
-            parentId: 'root',
-            timestamp: new Date().toISOString()
+          content: preparedUpload.content || '',
+          versions: [],
+          fileBlob: preparedUpload.fileBlob || null,
+          fileType: preparedUpload.fileType || '',
+          fileName: preparedUpload.fileName || '',
+          fileSize: Number(preparedUpload.fileSize || 0),
+          sourceFormat: preparedUpload.sourceFormat || '',
+          parentId: 'root',
+          timestamp: new Date().toISOString()
           };
 
           docs.push(newDoc);
@@ -6001,6 +6273,7 @@ async function applyPendingAppUpdate() {
       fileBlob: null,
       fileType: '',
       fileName: '',
+      fileSize: 0,
       sourceFormat: ''
     };
 
@@ -6015,6 +6288,7 @@ async function applyPendingAppUpdate() {
       fileBlob: preparedUpload.fileBlob || null,
       fileType: preparedUpload.fileType || '',
       fileName: preparedUpload.fileName || '',
+      fileSize: Number(preparedUpload.fileSize || 0),
       sourceFormat: preparedUpload.sourceFormat || '',
       parentId: destFolderId,
       timestamp: new Date().toISOString()

@@ -30,6 +30,31 @@ async function createDocument(page, { title, content = '', tags = '', category =
   await expect(page.locator('#list li').filter({ hasText: title }).first()).toBeVisible();
 }
 
+async function createBinaryAttachmentDocument(page, {
+  title,
+  fileName = 'adjunt.bin',
+  mimeType = 'application/octet-stream',
+  buffer = Buffer.from('adjunt de prova'),
+  tags = ''
+}) {
+  await page.locator('#docUpload').setInputFiles({
+    name: fileName,
+    mimeType,
+    buffer
+  });
+  if (title) {
+    await page.locator('#docName').fill(title);
+  }
+  if (tags) {
+    await page.locator('#docTags').fill(tags);
+  }
+  await page.locator('#addDocBtn').click();
+  await expectToast(page, 'Document afegit');
+  const finalTitle = title || fileName.replace(/\.[^.]+$/, '');
+  await expect(page.locator('#list li').filter({ hasText: finalTitle }).first()).toBeVisible();
+  return finalTitle;
+}
+
 async function openDocumentFromTree(page, title) {
   await page.locator('#list li').filter({ hasText: title }).first().locator('.item-title').click();
   await expect(page.locator('#editSaveBtn')).toBeVisible();
@@ -85,6 +110,7 @@ module.exports = {
   expectToast,
   fillEditor,
   createDocument,
+  createBinaryAttachmentDocument,
   openDocumentFromTree,
   installExternalBackupStub
 };

@@ -4,6 +4,7 @@ const {
   expectToast,
   fillEditor,
   createDocument,
+  createBinaryAttachmentDocument,
   openDocumentFromTree,
   installExternalBackupStub
 } = require('./helpers');
@@ -102,6 +103,39 @@ test('writes an automatic external backup and keeps the last good copy if the ap
 
   const writes = await page.evaluate(() => window.__sutsumuExternalBackupWrites.length);
   expect(writes).toBe(1);
+});
+
+test('recovers a lightweight attachment from the local survival mirror', async ({ page }) => {
+  await gotoApp(page);
+
+  const title = await createBinaryAttachmentDocument(page, {
+    title: 'Regressio Adjunt Lleuger',
+    fileName: 'mirall.bin',
+    buffer: Buffer.from('adjunt lleuger protegit')
+  });
+
+  await expect(page.locator('#attachmentHealthText')).toContainText('còpia de supervivència local');
+
+  await page.evaluate(async () => {
+    const deleteDb = (name) => new Promise(resolve => {
+      const request = indexedDB.deleteDatabase(name);
+      request.onsuccess = () => resolve(true);
+      request.onerror = () => resolve(true);
+      request.onblocked = () => resolve(true);
+    });
+    await deleteDb('BentoApp');
+    localStorage.removeItem('bento_simple_docs');
+    localStorage.removeItem('bento_expanded_folders');
+  });
+
+  await page.reload();
+  await expect(page.locator('#confirmTitle')).toContainText('Recuperar la còpia local de supervivència?');
+  await page.locator('#confirmOkBtn').click();
+  await expectToast(page, 'Còpia local recuperada correctament.');
+
+  await openDocumentFromTree(page, title);
+  await expect(page.locator('#mediaPreviewGroup')).toContainText('Descarregar Fitxer');
+  await expect(page.locator('#mediaPreviewGroup')).not.toContainText('Fitxer no recuperable');
 });
 
 test('exports and reopens a portable workspace', async ({ page, browser }, testInfo) => {

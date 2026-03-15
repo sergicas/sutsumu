@@ -235,6 +235,21 @@
                     En Chrome o navegadors compatibles d'escriptori, Sutsumu pot reescriure automàticament una còpia JSON fora del navegador després de cada canvi estable.
                   </div>
                 </div>
+                <div class="backup-external-card">
+                  <div class="backup-automation-header">
+                    <div>
+                      <div class="backup-automation-label">Integritat d'adjunts</div>
+                      <p id="attachmentHealthText" class="backup-automation-text">Analitzant l'estat dels fitxers adjunts...</p>
+                    </div>
+                    <span id="attachmentHealthBadge" class="badge backup-count-badge">0</span>
+                  </div>
+                  <div class="backup-automation-actions">
+                    <button id="exportSafeZipBtn" type="button" class="btn btn-secondary btn-small">Exportar ZIP segur</button>
+                  </div>
+                  <div id="attachmentHealthHint" class="backup-external-hint">
+                    Els adjunts petits poden quedar també reflectits en la còpia local de supervivència. Els adjunts grans continuen requerint un backup complet, un workspace o un backup extern.
+                  </div>
+                </div>
               </div>
               <div class="workspace-card">
                 <div class="workspace-header">

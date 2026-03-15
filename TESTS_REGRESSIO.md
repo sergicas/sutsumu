@@ -12,6 +12,7 @@ Aquest paquet comprova els fluxos critics de Sutsumu amb Playwright sobre servid
 - Exportacio i importacio JSON
 - Backup intern manual i historial
 - Backup extern automatic amb fitxer connectat
+- Recuperacio d'un adjunt lleuger des del mirall local de supervivencia
 - Recuperacio des del mirall de supervivencia si es perd IndexedDB
 
 ## Com executar-los

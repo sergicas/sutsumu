@@ -37,3 +37,5 @@ npm run test:regression
 - recuperació automàtica si l'app arrenca buida després d'una fallada d'IndexedDB
 - backup extern automàtic a un fitxer JSON connectat quan el navegador permet accés directe al disc
 - protecció per no sobreescriure la còpia externa amb un estat buit
+- mirall local específic per a adjunts lleugers, perquè alguns fitxers petits també es puguin reconstruir després d'una fallada
+- exportació manual en ZIP segur per treure fora del navegador carpetes, documents, versions i adjunts

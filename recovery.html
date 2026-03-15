@@ -30,7 +30,7 @@
     <div class="card">
       <span class="badge">Recuperació</span>
       <h1>Recuperació de Sutsumu</h1>
-      <p>Aquesta pantalla llegeix la <strong>còpia local de supervivència</strong> guardada al navegador. Serveix per recuperar carpetes i documents recents si l'app principal queda buida o falla en arrencar.</p>
+      <p>Aquesta pantalla llegeix la <strong>còpia local de supervivència</strong> guardada al navegador. Serveix per recuperar carpetes i documents recents si l'app principal queda buida o falla en arrencar. Quan hi caben, també hi reincorpora adjunts lleugers.</p>
       <p class="muted">Obre aquesta pàgina des del mateix navegador i perfil on havies fet servir Sutsumu.</p>
       <div class="actions">
         <a class="btn secondary" href="index.html">Tornar a Sutsumu</a>
@@ -65,6 +65,7 @@
   <script>
     const SURVIVAL_LIGHT_BACKUP_HISTORY_KEY = 'sutsumu_survival_light_backup_history_v1';
     const SURVIVAL_RECOVERY_VAULT_KEY = 'sutsumu_survival_recovery_vault_v1';
+    const SURVIVAL_ATTACHMENT_MIRROR_KEY = 'sutsumu_survival_attachment_mirror_v1';
     const survivalSummary = document.getElementById('survivalSummary');
     const survivalStats = document.getElementById('survivalStats');
     const vaultSummary = document.getElementById('vaultSummary');
@@ -103,7 +104,34 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
+    function normalizeAttachmentMirrorSnapshot(rawSnapshot) {
+      if (!rawSnapshot || typeof rawSnapshot !== 'object') return { entries: [] };
+      return {
+        entries: Array.isArray(rawSnapshot.entries)
+          ? rawSnapshot.entries.filter(entry => entry && typeof entry.id === 'string' && typeof entry.dataUrl === 'string' && entry.dataUrl.startsWith('data:'))
+          : []
+      };
+    }
+
+    function mergeSurvivalAttachments(rawDocs, mirrorSnapshot) {
+      const mirrorMap = new Map(normalizeAttachmentMirrorSnapshot(mirrorSnapshot).entries.map(entry => [entry.id, entry]));
+      return (Array.isArray(rawDocs) ? rawDocs : []).map(item => {
+        if (!item || item.type !== 'document') return item;
+        const mirrorEntry = mirrorMap.get(item.id);
+        if (!mirrorEntry) return item;
+        return {
+          ...item,
+          fileBlobDataUrl: typeof item.fileBlobDataUrl === 'string' && item.fileBlobDataUrl ? item.fileBlobDataUrl : mirrorEntry.dataUrl,
+          fileType: item.fileType || mirrorEntry.fileType || '',
+          fileName: item.fileName || mirrorEntry.fileName || '',
+          fileSize: Number(item.fileSize || mirrorEntry.size || 0),
+          binaryFileUnavailable: false
+        };
+      });
+    }
+
     const survivalHistory = safeParse(localStorage.getItem(SURVIVAL_LIGHT_BACKUP_HISTORY_KEY), []);
+    const attachmentMirror = safeParse(localStorage.getItem(SURVIVAL_ATTACHMENT_MIRROR_KEY), null);
     const latestSurvival = Array.isArray(survivalHistory) && survivalHistory.length
       ? survivalHistory.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
       : null;
@@ -122,7 +150,7 @@
           app: 'Sutsumu',
           appVersion: '1.0.0',
           appRelease: 'estable',
-          docs: Array.isArray(latestSurvival.docs) ? latestSurvival.docs : [],
+          docs: mergeSurvivalAttachments(latestSurvival.docs, attachmentMirror),
           expandedFolders: Array.isArray(latestSurvival.expandedFolders) ? latestSurvival.expandedFolders : [],
           source: 'survival-local-mirror'
         });
