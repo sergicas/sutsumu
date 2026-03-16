@@ -12,8 +12,15 @@ La fase actual de `pull segur` fa això:
 - permet aplicar manualment un remot quan:
   - el remot va per davant
   - o el dispositiu encara no té cap `head` local equivalent
+- quan hi ha divergència, ofereix una resolució guiada:
+  - crea còpia crítica de recuperació
+  - desa una còpia portable del local a `Workspaces recents`
+  - i després aplica el remot només si tu ho confirms
 - abans d'aplicar-lo, crea una còpia crítica de recuperació
 - no reescriu automàticament ni el `workspace` extern ni el backup extern
+- valida adjunts remots si el bundle porta:
+  - `inlineDataUrl`
+  - o una `downloadUrl` verificable
 - detecta si:
   - no hi ha remot
   - el remot està disponible
@@ -47,10 +54,11 @@ Però encara no són un backend complet amb:
 
 Per tant, fer un `pull` automàtic real ara seria massa arriscat.
 
-En aquesta fase, els adjunts remots encara entren només com a metadades:
+En aquesta fase, els adjunts remots entren així:
 
 - si el dispositiu ja tenia el mateix fitxer binari local, Sutsumu el conserva
-- si no, el document queda marcat sense còpia binària local recuperada
+- si el remot porta `inlineDataUrl` o `downloadUrl`, Sutsumu el valida abans d'aplicar-lo
+- si no hi ha binari remot descarregable, el document queda marcat només amb metadades
 
 ## Criteri De Seguretat
 
@@ -66,7 +74,6 @@ Sutsumu només hauria d'aplicar remot automàticament quan existeixin alhora:
 
 El següent sprint hauria de preparar:
 
-- gestió formal de divergència
-- descàrrega segura d'adjunts remots
-- verificació de `checksum`
-- base per a `push` i `pull` guiats sense pèrdua de dades
+- adjunts remots fora del bundle inline
+- verificació més forta d'integritat per backend viu
+- `push` i `pull` guiats directes sobre backend amb contracte estable

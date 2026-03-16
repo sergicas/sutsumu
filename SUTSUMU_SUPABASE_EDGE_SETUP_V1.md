@@ -1,14 +1,15 @@
 ## Sutsumu Supabase Edge Setup v1
 
-Aquesta es la primera configuracio real de backend viu per a `Sutsumu`, encara en mode nomes lectura.
+Aquesta es la primera configuracio real de backend viu per a `Sutsumu`, amb lectura segura del `head` i `push` manual controlat.
 
 ### Que fa aquest starter pack
 
 - crea la taula `sutsumu_workspace_heads`
 - crea un bucket privat `sutsumu-sync`
-- desplega una `Edge Function` read-only anomenada `sutsumu-head`
+- desplega una `Edge Function` anomenada `sutsumu-head`
 - retorna un descriptor `head` compatible amb l'app
 - genera una URL signada del bundle quan el fitxer es en storage privat
+- accepta un `POST` manual de Sutsumu per pujar un nou bundle si el `head` remot esperat continua sent el mateix
 
 ### Fitxers
 
@@ -29,6 +30,8 @@ Aquesta es la primera configuracio real de backend viu per a `Sutsumu`, encara e
 3. Definir `SUTSUMU_SHARED_KEY` a Supabase.
 4. Pujar un bundle shadow a `sutsumu-sync/...`.
 5. Crear o actualitzar una fila a `sutsumu_workspace_heads`.
+
+Quan ja tinguis el connector configurat a l'app, aquest pas 4/5 també el pot fer `Sutsumu` des del botó `Push manual`.
 
 ### Exemple de fila minima
 
@@ -51,7 +54,9 @@ Aquesta es la primera configuracio real de backend viu per a `Sutsumu`, encara e
 
 ### Politica de seguretat en aquesta fase
 
-- la funcio nomes llegeix
-- no hi ha `pull` ni `push`
+- la funcio llegeix el `head` i accepta `push` manual
+- no hi ha `pull` automàtic ni `push` automàtic
+- cada `push` exigeix `expectedHeadRevisionId`
+- si el `head` remot ha canviat, la funcio respon `409`
 - la taula queda amb `RLS` activada
-- l'accés de lectura passa per la `Edge Function`, no directament per REST
+- l'accés passa per la `Edge Function`, no directament per REST

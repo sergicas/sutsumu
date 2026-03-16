@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { createHash } = require('crypto');
 const {
   gotoApp,
   expectToast,
@@ -8,6 +9,14 @@ const {
   openDocumentFromTree,
   installExternalBackupStub
 } = require('./helpers');
+
+function createSha256(buffer) {
+  return `sha256:${createHash('sha256').update(buffer).digest('hex')}`;
+}
+
+function createInlineDataUrl(buffer, mimeType = 'application/octet-stream') {
+  return `data:${mimeType};base64,${Buffer.from(buffer).toString('base64')}`;
+}
 
 test('creates, edits and reopens a document without losing content', async ({ page }) => {
   await gotoApp(page);
@@ -205,6 +214,116 @@ test('applies a remote shadow bundle manually with a safety pull', async ({ page
   await expectToast(targetPage, 'Remot aplicat localment');
   await expect(targetPage.locator('#list li').filter({ hasText: 'Regressio Pull Manual' })).toHaveCount(1);
   await expect(targetPage.locator('#syncRemoteBadge')).toContainText('Al dia');
+
+  await targetContext.close();
+});
+
+test('resolves a diverged remote head by preserving the local state first', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio Remot Divergent',
+    content: 'Aquest sera el remot final',
+    tags: 'remote, diverged'
+  });
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('remote-shadow-diverged.json');
+  await exportDownload.saveAs(bundlePath);
+  const sourceBundle = JSON.parse(require('fs').readFileSync(bundlePath, 'utf8'));
+  const sourceHead = sourceBundle.revisions[0];
+
+  const targetContext = await browser.newContext();
+  const targetPage = await targetContext.newPage();
+  await gotoApp(targetPage);
+  await targetPage.evaluate(({ workspaceId, workspaceName }) => {
+    localStorage.setItem('bento_workspace_meta_v1', JSON.stringify({
+      id: workspaceId,
+      name: workspaceName,
+      lastSavedAt: '',
+      bindingMode: 'portable'
+    }));
+    localStorage.setItem('sutsumu_sync_prep_meta_v1', JSON.stringify({
+      primaryWorkspaceId: workspaceId,
+      primaryWorkspaceName: workspaceName,
+      lastWorkspaceMode: 'portable'
+    }));
+  }, {
+    workspaceId: sourceHead.workspaceId,
+    workspaceName: sourceHead.workspaceName
+  });
+  await targetPage.reload();
+  await expect(targetPage).toHaveTitle(/Sutsumu/i);
+  await createDocument(targetPage, {
+    title: 'Regressio Local Divergent',
+    content: 'Aquest es el local que es guardara abans del remot',
+    tags: 'local, diverged'
+  });
+  await targetPage.locator('#forceShadowRevisionBtn').click();
+  await expectToast(targetPage, 'Revisió shadow preparada');
+
+  await targetPage.locator('#remoteShadowFileInput').setInputFiles(bundlePath);
+  await expectToast(targetPage, 'Bundle remot importat');
+  await expect(targetPage.locator('#syncRemoteBadge')).toContainText('Divergència');
+  await expect(targetPage.locator('#guidedRemotePullBtn')).toBeEnabled();
+
+  await targetPage.locator('#guidedRemotePullBtn').click();
+  await expect(targetPage.locator('#confirmTitle')).toContainText('Resoldre divergència');
+  await targetPage.locator('#confirmTypedInput').fill('REMOT');
+  await targetPage.locator('#confirmOkBtn').click();
+
+  await expectToast(targetPage, 'Divergència resolta aplicant el remot');
+  await expect(targetPage.locator('#list li').filter({ hasText: 'Regressio Remot Divergent' })).toHaveCount(1);
+  await expect(targetPage.locator('#list li').filter({ hasText: 'Regressio Local Divergent' })).toHaveCount(0);
+  await expect(targetPage.locator('#syncRemoteBadge')).toContainText('Al dia');
+
+  await targetContext.close();
+});
+
+test('validates a remote inline attachment before applying the pull', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  const attachmentBuffer = Buffer.from('adjunt remot validat');
+  const attachmentTitle = await createBinaryAttachmentDocument(page, {
+    title: 'Regressio Adjunt Remot',
+    fileName: 'regressio-adjunt.bin',
+    mimeType: 'application/octet-stream',
+    buffer: attachmentBuffer
+  });
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('remote-shadow-inline-attachment.json');
+  await exportDownload.saveAs(bundlePath);
+
+  const bundle = JSON.parse(require('fs').readFileSync(bundlePath, 'utf8'));
+  const targetDoc = bundle.revisions[0].payload.snapshot.docs.find(item => item.type === 'document' && item.title === attachmentTitle);
+  expect(targetDoc).toBeTruthy();
+  targetDoc.attachment.inlineDataUrl = createInlineDataUrl(attachmentBuffer, 'application/octet-stream');
+  targetDoc.attachment.checksum = createSha256(attachmentBuffer);
+  targetDoc.attachment.availability = 'remote-inline-ready';
+  require('fs').writeFileSync(bundlePath, JSON.stringify(bundle, null, 2));
+
+  const targetContext = await browser.newContext();
+  const targetPage = await targetContext.newPage();
+  await gotoApp(targetPage);
+  await targetPage.locator('#remoteShadowFileInput').setInputFiles(bundlePath);
+  await expectToast(targetPage, 'Bundle remot importat');
+  await targetPage.locator('#applyRemoteShadowPullBtn').click();
+  await targetPage.locator('#confirmOkBtn').click();
+
+  await expectToast(targetPage, '1 validats des del remot');
+  await expect(targetPage.locator('#list li').filter({ hasText: attachmentTitle })).toHaveCount(1);
+  await expect(targetPage.locator('#attachmentHealthText')).not.toContainText('no tenen el fitxer binari');
 
   await targetContext.close();
 });
@@ -606,6 +725,87 @@ test('connects a Supabase Edge Function head with a shared key safely', async ({
   expect(capturedHeaders['x-sutsumu-key']).toBe('shared-edge-key');
 
   await remoteContext.close();
+});
+
+test('pushes the local head manually to a Supabase Edge backend without silent overwrite', async ({ page }) => {
+  await gotoApp(page);
+
+  const attachmentBuffer = Buffer.from('push manual amb adjunt');
+  await createBinaryAttachmentDocument(page, {
+    title: 'Regressio Push Manual',
+    fileName: 'push-manual.bin',
+    mimeType: 'application/octet-stream',
+    buffer: attachmentBuffer
+  });
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+  const localWorkspaceId = await page.evaluate(() => JSON.parse(localStorage.getItem('sutsumu_sync_prep_meta_v1') || '{}').primaryWorkspaceId || '');
+  expect(localWorkspaceId).toBeTruthy();
+
+  const postBodies = [];
+  const postHeaders = [];
+  await page.context().route('https://push.supabase.co/functions/v1/sutsumu-head*', async route => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          'access-control-allow-origin': '*'
+        },
+        body: '[]'
+      });
+    }
+
+    postHeaders.push(request.headers());
+    postBodies.push(JSON.parse(request.postData() || '{}'));
+    const pushedHead = postBodies[0].bundle.revisions[0];
+    return route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*'
+      },
+      body: JSON.stringify({
+        schema: 'sutsumu-cloud-sync-provider-head',
+        provider: 'supabase-edge-function',
+        workspaceId: pushedHead.workspaceId,
+        workspaceName: pushedHead.workspaceName,
+        headRevisionId: pushedHead.revisionId,
+        payloadSignature: pushedHead.payloadSignature,
+        bundleUrl: 'https://push.supabase.co/storage/v1/object/sign/sutsumu-sync/workspaces/push-shadow.json?token=signed'
+      })
+    });
+  });
+
+  await page.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await page.locator('#remoteProviderPreset').selectOption('supabase-function');
+  await page.locator('#remoteProviderBaseUrl').fill('https://push.supabase.co');
+  await page.locator('#remoteProviderFunctionName').fill('sutsumu-head');
+  await page.locator('#remoteProviderWorkspaceId').fill(localWorkspaceId);
+  await page.locator('#remoteProviderSecret').fill('shared-edge-key');
+  await page.locator('#remoteShadowUrl').fill('');
+  await page.locator('#connectRemoteShadowUrlBtn').click();
+
+  await expectToast(page, 'No hi ha cap head remot per a aquest workspace.');
+  await expect(page.locator('#syncRemoteBadge')).toContainText('Sense head');
+  await expect(page.locator('#pushRemoteShadowBtn')).toBeEnabled();
+
+  await page.locator('#pushRemoteShadowBtn').click();
+  await expect(page.locator('#confirmTitle')).toContainText('Fer push manual');
+  await page.locator('#confirmTypedInput').fill('PUSH');
+  await page.locator('#confirmOkBtn').click();
+
+  await expectToast(page, 'Push remot completat');
+  await expect(page.locator('#syncRemoteBadge')).toContainText('Al dia');
+
+  expect(postHeaders[0]['x-sutsumu-key']).toBe('shared-edge-key');
+  expect(postBodies[0].schema).toBe('sutsumu-cloud-sync-manual-push');
+  expect(postBodies[0].expectedHeadRevisionId).toBe('');
+  expect(postBodies[0].bundle.schema).toBe('sutsumu-cloud-sync-shadow-bundle');
+  const pushedDoc = postBodies[0].bundle.revisions[0].payload.snapshot.docs.find(item => item.type === 'document' && item.title === 'Regressio Push Manual');
+  expect(pushedDoc.attachment.inlineDataUrl.startsWith('data:application/octet-stream;base64,')).toBeTruthy();
+  expect(pushedDoc.attachment.checksum).toBe(createSha256(attachmentBuffer));
 });
 
 test('shows a clear empty-head state when the backend returns no workspace row', async ({ page, browser }) => {

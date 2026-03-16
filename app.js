@@ -108,7 +108,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const importRemoteShadowBtn = document.getElementById('importRemoteShadowBtn');
   const clearRemoteShadowBtn = document.getElementById('clearRemoteShadowBtn');
   const recheckRemoteShadowBtn = document.getElementById('recheckRemoteShadowBtn');
+  const guidedRemotePullBtn = document.getElementById('guidedRemotePullBtn');
   const applyRemoteShadowPullBtn = document.getElementById('applyRemoteShadowPullBtn');
+  const pushRemoteShadowBtn = document.getElementById('pushRemoteShadowBtn');
   const remoteShadowFileInput = document.getElementById('remoteShadowFileInput');
   const forceShadowRevisionBtn = document.getElementById('forceShadowRevisionBtn');
   const exportShadowBundleBtn = document.getElementById('exportShadowBundleBtn');
@@ -286,6 +288,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const SHADOW_SYNC_SCHEMA = 'sutsumu-cloud-sync-shadow-revision';
   const SHADOW_SYNC_BUNDLE_SCHEMA = 'sutsumu-cloud-sync-shadow-bundle';
   const REMOTE_PROVIDER_HEAD_SCHEMA = 'sutsumu-cloud-sync-provider-head';
+  const REMOTE_MANUAL_PUSH_SCHEMA = 'sutsumu-cloud-sync-manual-push';
   const SHADOW_SYNC_STATE_KEY = 'sutsumu_shadow_sync_state_v1';
   const SHADOW_SYNC_HISTORY_KEY = 'sutsumu_shadow_sync_history_v1';
   const SHADOW_SYNC_HISTORY_LIMIT = 18;
@@ -616,6 +619,51 @@ function createFastStateHash(value = '') {
   return `v1-${(hash >>> 0).toString(16).padStart(8, '0')}`;
 }
 
+function createCanonicalSyncAttachmentForSignature(attachment) {
+  if (!attachment || typeof attachment !== 'object') return null;
+  return {
+    fileName: attachment.fileName || '',
+    fileType: attachment.fileType || '',
+    fileSize: Number(attachment.fileSize || 0),
+    sourceFormat: attachment.sourceFormat || ''
+  };
+}
+
+function createCanonicalSyncDocsForSignature(syncDocs = []) {
+  if (!Array.isArray(syncDocs)) return [];
+  return syncDocs
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const base = {
+        id: item.id,
+        type: item.type,
+        parentId: item.parentId || 'root',
+        title: item.title || '',
+        tags: normalizeTags(item.tags),
+        timestamp: item.timestamp || '',
+        isDeleted: Boolean(item.isDeleted),
+        isFavorite: Boolean(item.isFavorite),
+        isPinned: Boolean(item.isPinned)
+      };
+
+      if (item.type === 'folder') {
+        return {
+          ...base,
+          desc: item.desc || '',
+          color: item.color || '#0ea5e9'
+        };
+      }
+
+      return {
+        ...base,
+        category: item.category || '',
+        content: sanitizeRichText(item.content || ''),
+        versions: normalizeVersions(item.versions || []).map(buildSyncVersionPayload),
+        attachment: createCanonicalSyncAttachmentForSignature(item.attachment)
+      };
+    });
+}
+
 function buildSyncVersionPayload(version) {
   return {
     id: version.id,
@@ -724,7 +772,7 @@ function createSyncPayloadSignature(payload) {
     schema: payload.schema,
     version: payload.version,
     workspace: payload.workspace,
-    docs: payload.snapshot.docs
+    docs: createCanonicalSyncDocsForSignature(payload.snapshot.docs)
   });
   return createFastStateHash(signatureBase);
 }
@@ -1735,9 +1783,9 @@ function updateRemoteProviderModeUI(options = {}) {
   }
   if (remoteProviderProfileHintEl) {
     if (effectivePreset === 'supabase') {
-      remoteProviderProfileHintEl.textContent = "Mode preparat per Supabase: pots enganxar una URL de head completa o només la URL del projecte i el local workspace id. Sutsumu construirà la consulta REST segura i acceptarà una fila PostgREST o un descriptor head remot sense fer encara cap pull o push.";
+      remoteProviderProfileHintEl.textContent = "Mode preparat per Supabase: pots enganxar una URL de head completa o només la URL del projecte i el local workspace id. Sutsumu construirà la consulta REST segura i acceptarà una fila PostgREST o un descriptor head remot. El push manual complet queda reservat als backends que també acceptin POST segur.";
     } else if (effectivePreset === 'supabase-function') {
-      remoteProviderProfileHintEl.textContent = "Mode preparat per Supabase Edge Functions: amb URL del projecte, nom de funcio, local workspace id i shared key, Sutsumu construirà la URL read-only del head i llegirà un descriptor remot segur sense fer encara cap pull o push.";
+      remoteProviderProfileHintEl.textContent = "Mode preparat per Supabase Edge Functions: amb URL del projecte, nom de funcio, local workspace id i shared key, Sutsumu construirà la URL del head segur. En aquesta fase també pot fer push manual si la funció accepta POST amb el contracte de Sutsumu.";
     } else if (effectivePreset === 'header') {
       remoteProviderProfileHintEl.textContent = 'Mode capçalera API: el nom i valor de la capçalera només es fan servir en aquest dispositiu.';
     } else if (effectivePreset === 'bearer') {
@@ -2071,7 +2119,7 @@ function getRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison
   const remoteHead = comparison?.remoteHead || getShadowHistoryHead(remoteShadowSource?.revisions || [], remoteShadowSource?.state?.lastRevisionId || '');
   const payload = remoteHead?.payload && typeof remoteHead.payload === 'object' ? remoteHead.payload : null;
   const syncDocs = Array.isArray(payload?.snapshot?.docs) ? payload.snapshot.docs : [];
-  const attachmentCount = syncDocs.filter(item => item?.type === 'document' && item?.attachment).length;
+  const attachmentSummary = summarizeRemoteAttachmentTransport(syncDocs);
   if (!remoteHead) {
     return {
       canApply: false,
@@ -2080,7 +2128,7 @@ function getRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison
       remoteHead,
       payload: null,
       syncDocs: [],
-      attachmentCount
+      attachmentSummary
     };
   }
   if (!payload || payload.schema !== SYNC_PAYLOAD_SCHEMA || !Array.isArray(payload.snapshot?.docs)) {
@@ -2091,7 +2139,7 @@ function getRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison
       remoteHead,
       payload: null,
       syncDocs: [],
-      attachmentCount
+      attachmentSummary
     };
   }
   if (!['remote-ahead', 'remote-only'].includes(comparison?.status)) {
@@ -2108,7 +2156,7 @@ function getRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison
       remoteHead,
       payload,
       syncDocs,
-      attachmentCount
+      attachmentSummary
     };
   }
   return {
@@ -2120,8 +2168,139 @@ function getRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison
     remoteHead,
     payload,
     syncDocs,
-    attachmentCount
+    attachmentSummary
   };
+}
+
+function getGuidedRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison()) {
+  const remoteHead = comparison?.remoteHead || getShadowHistoryHead(remoteShadowSource?.revisions || [], remoteShadowSource?.state?.lastRevisionId || '');
+  const payload = remoteHead?.payload && typeof remoteHead.payload === 'object' ? remoteHead.payload : null;
+  const syncDocs = Array.isArray(payload?.snapshot?.docs) ? payload.snapshot.docs : [];
+  const attachmentSummary = summarizeRemoteAttachmentTransport(syncDocs);
+  if (!remoteHead) {
+    return {
+      canGuide: false,
+      status: 'no-remote',
+      message: 'Encara no hi ha cap head remot disponible per resoldre divergència.',
+      remoteHead,
+      payload,
+      syncDocs,
+      attachmentSummary
+    };
+  }
+  if (!payload || payload.schema !== SYNC_PAYLOAD_SCHEMA || !Array.isArray(payload.snapshot?.docs)) {
+    return {
+      canGuide: false,
+      status: 'invalid-remote',
+      message: 'El remot actual no és aplicable perquè el payload no és compatible.',
+      remoteHead,
+      payload,
+      syncDocs,
+      attachmentSummary
+    };
+  }
+  if (comparison?.status !== 'diverged') {
+    const fallbackMessages = {
+      'remote-ahead': 'Aquí no hi ha divergència: pots aplicar el remot directament.',
+      'remote-only': 'Aquí no hi ha divergència: pots importar el remot directament.',
+      'local-ahead': 'El local va per davant; la divergència guiada no és necessària.',
+      'in-sync': 'Local i remot ja estan al dia.',
+      'other-workspace': 'Aquest remot pertany a un altre workspace.'
+    };
+    return {
+      canGuide: false,
+      status: comparison?.status || 'not-ready',
+      message: fallbackMessages[comparison?.status] || 'La resolució guiada només s’activa quan hi ha divergència real.',
+      remoteHead,
+      payload,
+      syncDocs,
+      attachmentSummary
+    };
+  }
+  return {
+    canGuide: true,
+    status: 'diverged',
+    message: 'Hi ha divergència real: Sutsumu pot guardar una còpia del local i després aplicar el remot de manera guiada.',
+    remoteHead,
+    payload,
+    syncDocs,
+    attachmentSummary
+  };
+}
+
+function getRemoteShadowPushReadiness(comparison = computeRemoteShadowComparison()) {
+  const currentRemoteUrl = remoteShadowConfig?.url || '';
+  if (getSelectedRemoteShadowMode() !== 'provider-head-url' || !currentRemoteUrl) {
+    return {
+      canPush: false,
+      status: 'not-configured',
+      message: 'Per fer push manual cal un backend connectat en mode Head backend.'
+    };
+  }
+  if (!docs.length) {
+    return {
+      canPush: false,
+      status: 'empty-local',
+      message: 'Encara no hi ha contingut local per enviar al núvol.'
+    };
+  }
+  if (remoteShadowConfig?.lastStatus === 'checking') {
+    return {
+      canPush: false,
+      status: 'checking',
+      message: 'Sutsumu encara està comprovant el remot configurat.'
+    };
+  }
+  if (['auth-error', 'not-found', 'error'].includes(remoteShadowConfig?.lastStatus || '')) {
+    return {
+      canPush: false,
+      status: remoteShadowConfig.lastStatus,
+      message: remoteShadowConfig.lastError || 'El backend remot actual no està llest per rebre el push.'
+    };
+  }
+  const fallbackMessages = {
+    'remote-ahead': 'El remot va per davant. Cal revisar o fer pull abans de permetre un push manual.',
+    'remote-only': 'Aquest dispositiu encara no té una base local comparable per fer push segur.',
+    'diverged': 'Hi ha divergència entre local i remot. Primer cal resoldre-la.',
+    'other-workspace': 'Aquest remot apunta a un altre workspace.',
+    'in-sync': 'Local i remot ja estan al dia. No cal fer push ara mateix.'
+  };
+  if (['remote-ahead', 'remote-only', 'diverged', 'other-workspace', 'in-sync'].includes(comparison?.status || '')) {
+    return {
+      canPush: false,
+      status: comparison?.status || 'not-ready',
+      message: fallbackMessages[comparison?.status] || 'Encara no es pot fer push manual segur.'
+    };
+  }
+  return {
+    canPush: true,
+    status: comparison?.status || 'no-remote',
+    message: comparison?.status === 'local-ahead'
+      ? 'El local va per davant i es pot enviar manualment al remot sense sobreescriptura cega.'
+      : 'No hi ha cap head remot encara: aquest push crearà la primera còpia remota.'
+  };
+}
+
+function summarizeRemoteAttachmentTransport(syncDocs = []) {
+  return syncDocs
+    .filter(item => item?.type === 'document' && item?.attachment)
+    .reduce((summary, item) => {
+      const attachment = item.attachment || {};
+      summary.total += 1;
+      if (typeof attachment.inlineDataUrl === 'string' && attachment.inlineDataUrl.startsWith('data:')) {
+        summary.inlineReady += 1;
+      } else if (typeof attachment.downloadUrl === 'string' && attachment.downloadUrl.trim()) {
+        summary.downloadReady += 1;
+      } else {
+        summary.metadataOnly += 1;
+      }
+      return summary;
+    }, {
+      total: 0,
+      inlineReady: 0,
+      downloadReady: 0,
+      metadataOnly: 0
+    });
 }
 
 function canPreserveLocalAttachmentBlob(remoteItem, localItem) {
@@ -2132,53 +2311,228 @@ function canPreserveLocalAttachmentBlob(remoteItem, localItem) {
     && (remoteItem.attachment.sourceFormat || '') === (localItem.sourceFormat || '');
 }
 
-function hydrateDocsFromSyncPayload(syncDocs, currentDocs = docs) {
-  if (!Array.isArray(syncDocs)) return [];
-  const localDocsById = new Map(normalizeDocs(currentDocs).map(item => [item.id, item]));
-  const hydrated = syncDocs
-    .filter(item => item && typeof item === 'object')
-    .map(item => {
-      if (item.type === 'folder') {
-        return {
-          id: item.id,
-          type: 'folder',
-          title: item.title || 'Carpeta',
-          parentId: item.parentId || 'root',
-          timestamp: item.timestamp || new Date().toISOString(),
-          isDeleted: Boolean(item.isDeleted),
-          desc: typeof item.desc === 'string' ? item.desc : '',
-          color: typeof item.color === 'string' && item.color.trim() ? item.color : '#0ea5e9',
-          tags: normalizeTags(item.tags),
-          isFavorite: Boolean(item.isFavorite),
-          isPinned: Boolean(item.isPinned)
-        };
-      }
+function resolveRemoteAttachmentUrl(attachment = {}, providerProfile = remoteProviderProfile) {
+  if (typeof attachment.downloadUrl === 'string' && attachment.downloadUrl.trim()) {
+    return new URL(attachment.downloadUrl.trim(), remoteShadowConfig?.url || window.location.href).toString();
+  }
+  const objectKey = String(attachment.remoteObjectKey || '').trim();
+  if (!objectKey) return '';
+  const normalizedProfile = normalizeRemoteProviderProfile(providerProfile);
+  if (!normalizedProfile.baseUrl) return '';
+  const access = String(attachment.remoteAccess || attachment.bundleAccess || 'public').trim() || 'public';
+  return buildSupabaseStorageObjectUrl(normalizedProfile.baseUrl, objectKey, access);
+}
 
-      const attachment = item.attachment && typeof item.attachment === 'object' ? item.attachment : null;
-      const localDoc = localDocsById.get(item.id);
-      const preservedBlob = canPreserveLocalAttachmentBlob(item, localDoc) ? localDoc.fileBlob : null;
-      return {
+async function materializeRemoteAttachmentBlob(attachment = {}, providerProfile = remoteProviderProfile, providerSecret = remoteProviderSecret) {
+  if (!attachment || typeof attachment !== 'object') {
+    return { blob: null, source: 'none' };
+  }
+  if (typeof attachment.inlineDataUrl === 'string' && attachment.inlineDataUrl.startsWith('data:')) {
+    const inlineBlob = dataUrlToBlob(attachment.inlineDataUrl, attachment.fileType || 'application/octet-stream');
+    return {
+      blob: await validateRemoteAttachmentBlob(inlineBlob, attachment),
+      source: 'inline'
+    };
+  }
+  const downloadUrl = resolveRemoteAttachmentUrl(attachment, providerProfile);
+  if (!downloadUrl) {
+    return { blob: null, source: 'metadata-only' };
+  }
+  const response = await fetch(downloadUrl, {
+    method: 'GET',
+    cache: 'no-store',
+    headers: {
+      'Accept': attachment.fileType || '*/*',
+      ...buildRemoteProviderAuthHeaders(providerProfile, providerSecret)
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`No s'ha pogut descarregar l'adjunt remot ${attachment.fileName || 'sense nom'} (${response.status}).`);
+  }
+  const remoteBlob = await response.blob();
+  return {
+    blob: await validateRemoteAttachmentBlob(remoteBlob, attachment),
+    source: 'download'
+  };
+}
+
+async function hydrateDocsFromSyncPayload(syncDocs, currentDocs = docs, options = {}) {
+  if (!Array.isArray(syncDocs)) {
+    return {
+      docs: [],
+      attachmentSummary: {
+        total: 0,
+        preservedLocal: 0,
+        restoredRemote: 0,
+        metadataOnly: 0
+      }
+    };
+  }
+  const { providerProfile = remoteProviderProfile, providerSecret = remoteProviderSecret } = options;
+  const localDocsById = new Map(normalizeDocs(currentDocs).map(item => [item.id, item]));
+  const attachmentSummary = {
+    total: 0,
+    preservedLocal: 0,
+    restoredRemote: 0,
+    metadataOnly: 0
+  };
+  const hydrated = [];
+  for (const item of syncDocs.filter(entry => entry && typeof entry === 'object')) {
+    if (item.type === 'folder') {
+      hydrated.push({
         id: item.id,
-        type: 'document',
-        title: item.title || 'Document',
+        type: 'folder',
+        title: item.title || 'Carpeta',
         parentId: item.parentId || 'root',
         timestamp: item.timestamp || new Date().toISOString(),
         isDeleted: Boolean(item.isDeleted),
-        category: typeof item.category === 'string' ? item.category : '',
+        desc: typeof item.desc === 'string' ? item.desc : '',
+        color: typeof item.color === 'string' && item.color.trim() ? item.color : '#0ea5e9',
         tags: normalizeTags(item.tags),
-        content: sanitizeRichText(item.content || ''),
-        versions: normalizeVersions(item.versions || []),
-        fileBlob: preservedBlob,
-        fileType: attachment?.fileType || '',
-        fileName: attachment?.fileName || '',
-        fileSize: Number(attachment?.fileSize || 0),
-        sourceFormat: attachment?.sourceFormat || '',
-        binaryFileUnavailable: Boolean(attachment && !preservedBlob),
         isFavorite: Boolean(item.isFavorite),
         isPinned: Boolean(item.isPinned)
-      };
+      });
+      continue;
+    }
+
+    const attachment = item.attachment && typeof item.attachment === 'object' ? item.attachment : null;
+    const localDoc = localDocsById.get(item.id);
+    let resolvedBlob = canPreserveLocalAttachmentBlob(item, localDoc) ? localDoc.fileBlob : null;
+
+    if (attachment) {
+      attachmentSummary.total += 1;
+      if (resolvedBlob) {
+        attachmentSummary.preservedLocal += 1;
+      } else {
+        const remoteMaterialized = await materializeRemoteAttachmentBlob(attachment, providerProfile, providerSecret);
+        resolvedBlob = remoteMaterialized.blob || null;
+        if (resolvedBlob) {
+          attachmentSummary.restoredRemote += 1;
+        } else {
+          attachmentSummary.metadataOnly += 1;
+        }
+      }
+    }
+
+    hydrated.push({
+      id: item.id,
+      type: 'document',
+      title: item.title || 'Document',
+      parentId: item.parentId || 'root',
+      timestamp: item.timestamp || new Date().toISOString(),
+      isDeleted: Boolean(item.isDeleted),
+      category: typeof item.category === 'string' ? item.category : '',
+      tags: normalizeTags(item.tags),
+      content: sanitizeRichText(item.content || ''),
+      versions: normalizeVersions(item.versions || []),
+      fileBlob: resolvedBlob,
+      fileType: attachment?.fileType || '',
+      fileName: attachment?.fileName || '',
+      fileSize: Number(attachment?.fileSize || 0),
+      sourceFormat: attachment?.sourceFormat || '',
+      binaryFileUnavailable: Boolean(attachment && !resolvedBlob),
+      isFavorite: Boolean(item.isFavorite),
+      isPinned: Boolean(item.isPinned)
     });
-  return normalizeDocs(hydrated);
+  }
+  return {
+    docs: normalizeDocs(hydrated),
+    attachmentSummary
+  };
+}
+
+function buildRemotePullAttachmentMessage(summary = {}) {
+  const total = Number(summary.total || 0);
+  if (total === 0) return '';
+  const parts = [];
+  if (summary.preservedLocal > 0) parts.push(`${summary.preservedLocal} conservats des del dispositiu`);
+  if (summary.restoredRemote > 0) parts.push(`${summary.restoredRemote} validats des del remot`);
+  if (summary.metadataOnly > 0) parts.push(`${summary.metadataOnly} només en metadades`);
+  return ` Adjunts: ${parts.join(' · ')}.`;
+}
+
+async function rememberConflictWorkspaceCopy(reason = 'remote-guided-pull') {
+  const payload = await createWorkspacePayload(reason);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const baseName = getWorkspaceDisplayName() === 'Sense workspace'
+    ? 'sutsumu-conflicte-local'
+    : `${slugifyFileName(getWorkspaceDisplayName())}-conflicte-local`;
+  await rememberRecentWorkspace(payload, {
+    mode: 'portable',
+    source: reason,
+    fileName: `${baseName}-${timestamp}${WORKSPACE_FILE_EXTENSION}`
+  });
+}
+
+async function performRemoteShadowPull(readiness, options = {}) {
+  const {
+    confirmationTitle = 'Aplicar el remot manualment?',
+    okLabel = 'Aplicar remot',
+    warningText = "Abans de continuar, Sutsumu crearà una còpia crítica de recuperació. Aquesta fase no farà cap pull automàtic ni sobreescriurà el teu workspace extern sense que el desis tu.",
+    successPrefix = 'Remot aplicat localment.',
+    safetyReason = 'before-remote-manual-pull',
+    saveReason = 'remote-manual-pull',
+    preserveConflictWorkspace = false,
+    requireText = ''
+  } = options;
+
+  const remoteDate = readiness.remoteHead?.createdAt
+    ? new Date(readiness.remoteHead.createdAt).toLocaleString('ca-ES')
+    : 'fa un moment';
+  const attachmentSummary = readiness.attachmentSummary || summarizeRemoteAttachmentTransport(readiness.syncDocs);
+  const attachmentWarning = attachmentSummary.total > 0
+    ? ` El remot inclou ${attachmentSummary.total} adjunts. Sutsumu conservarà els binaris locals equivalents i validarà qualsevol adjunt remot que vingui inline o amb URL descarregable; la resta quedaran només com a metadades fins a una fase posterior.`
+    : '';
+  const conflictWarning = preserveConflictWorkspace
+    ? ' També desarà una còpia portable del local actual a Workspaces recents abans de substituir-lo.'
+    : '';
+
+  openConfirm(
+    confirmationTitle,
+    `Sutsumu importarà el head remot del ${remoteDate} i substituirà l'estat local visible.${attachmentWarning}${conflictWarning}`,
+    async () => {
+      try {
+        const canContinue = await prepareSafetySnapshotOrAbort(safetyReason, preserveConflictWorkspace ? 'resoldre la divergència amb el remot' : 'aplicar el remot manualment');
+        if (!canContinue) return;
+        if (preserveConflictWorkspace) {
+          await rememberConflictWorkspaceCopy(saveReason);
+        }
+        const hydratedResult = await hydrateDocsFromSyncPayload(readiness.syncDocs, docs, {
+          providerProfile: remoteProviderProfile,
+          providerSecret: remoteProviderSecret
+        });
+        docs = hydratedResult.docs;
+        expandedFolders = normalizeExpandedFolders(expandedFolders, docs);
+        const remoteWorkspace = readiness.payload?.workspace && typeof readiness.payload.workspace === 'object'
+          ? readiness.payload.workspace
+          : null;
+        workspaceMeta = {
+          id: typeof remoteWorkspace?.id === 'string' && remoteWorkspace.id.trim()
+            ? remoteWorkspace.id.trim()
+            : (workspaceMeta?.id || generateId('workspace')),
+          name: normalizeWorkspaceName(remoteWorkspace?.name || workspaceMeta?.name || 'Sutsumu Workspace'),
+          lastSavedAt: workspaceMeta?.lastSavedAt || '',
+          bindingMode: workspaceHandle ? 'fs' : (workspaceMeta?.bindingMode === 'portable' ? 'portable' : 'local')
+        };
+        workspaceDirty = true;
+        await persistWorkspaceBinding();
+        await saveData(saveReason);
+        await createShadowRevisionNow(`shadow-${saveReason}`, { silent: true, force: true });
+        renderData();
+        updateRemoteShadowUI();
+        showToast(`${successPrefix}${buildRemotePullAttachmentMessage(hydratedResult.attachmentSummary)} Revisa-ho i desa el workspace o el backup extern quan et vagi bé.`);
+      } catch (err) {
+        console.error(err);
+        showToast(err?.message || "No s'ha pogut aplicar el remot amb seguretat.", 'error');
+      }
+    },
+    {
+      okLabel,
+      warningText,
+      requireText
+    }
+  );
+  return true;
 }
 
 async function applyRemoteShadowPull() {
@@ -2188,44 +2542,193 @@ async function applyRemoteShadowPull() {
     showToast(readiness.message, readiness.status === 'diverged' || readiness.status === 'other-workspace' ? 'error' : 'info');
     return false;
   }
+  return performRemoteShadowPull(readiness, {
+    confirmationTitle: 'Aplicar el remot manualment?',
+    okLabel: 'Aplicar remot',
+    safetyReason: 'before-remote-manual-pull',
+    saveReason: 'remote-manual-pull',
+    successPrefix: 'Remot aplicat localment.'
+  });
+}
 
-  const remoteDate = readiness.remoteHead?.createdAt
-    ? new Date(readiness.remoteHead.createdAt).toLocaleString('ca-ES')
-    : 'fa un moment';
-  const attachmentWarning = readiness.attachmentCount > 0
-    ? ` El remot inclou ${readiness.attachmentCount} adjunts en mode metadades: conservaré els fitxers binaris locals si ja existeixen al dispositiu, però encara no baixaré binaris nous del núvol en aquesta fase.`
+async function applyGuidedRemoteShadowPull() {
+  const comparison = computeRemoteShadowComparison();
+  const readiness = getGuidedRemoteShadowPullReadiness(comparison);
+  if (!readiness.canGuide) {
+    showToast(readiness.message, readiness.status === 'other-workspace' ? 'error' : 'info');
+    return false;
+  }
+  return performRemoteShadowPull(readiness, {
+    confirmationTitle: 'Resoldre divergència i aplicar remot?',
+    okLabel: 'Guardar local i aplicar remot',
+    warningText: 'Sutsumu crearà una còpia crítica de recuperació i guardarà el local actual a Workspaces recents abans d’aplicar el head remot. No tocarà el teu workspace extern ni el backup extern fins que els desis tu.',
+    safetyReason: 'before-remote-guided-pull',
+    saveReason: 'remote-guided-pull',
+    preserveConflictWorkspace: true,
+    requireText: 'REMOT',
+    successPrefix: 'Divergència resolta aplicant el remot.'
+  });
+}
+
+async function createRemoteManualPushBundle() {
+  await createShadowRevisionNow('shadow-remote-manual-push-prep', { silent: true, force: false });
+  const baseBundle = createShadowSyncBundle();
+  if (!Array.isArray(baseBundle.revisions) || baseBundle.revisions.length === 0) {
+    throw new Error('Encara no hi ha cap revisió local preparada per fer push.');
+  }
+  const bundle = JSON.parse(JSON.stringify(baseBundle));
+  const headRevision = bundle.revisions.find(entry => entry.revisionId === bundle.state.lastRevisionId) || bundle.revisions[0];
+  if (!headRevision?.payload?.snapshot?.docs) {
+    throw new Error('El head local actual no porta un payload compatible per al push.');
+  }
+  const localDocsById = new Map(normalizeDocs(docs).map(item => [item.id, item]));
+  const attachmentSummary = {
+    total: 0,
+    inlineReady: 0,
+    metadataOnly: 0
+  };
+
+  for (const syncItem of headRevision.payload.snapshot.docs) {
+    const localDoc = localDocsById.get(syncItem.id);
+    if (syncItem?.type !== 'document') continue;
+    const baseAttachment = syncItem.attachment && typeof syncItem.attachment === 'object'
+      ? syncItem.attachment
+      : (isBinaryAttachmentDocument(localDoc) ? {
+          fileName: localDoc.fileName || '',
+          fileType: localDoc.fileType || '',
+          fileSize: Number(localDoc.fileSize || (isRealBlob(localDoc.fileBlob) ? localDoc.fileBlob.size : 0) || 0),
+          sourceFormat: localDoc.sourceFormat || '',
+          checksum: '',
+          availability: localDoc.binaryFileUnavailable ? 'missing-local-copy' : 'local-pending-upload'
+        } : null);
+    if (!baseAttachment) continue;
+    attachmentSummary.total += 1;
+    if (isRealBlob(localDoc?.fileBlob)) {
+      syncItem.attachment = {
+        ...baseAttachment,
+        checksum: await computeBlobChecksum(localDoc.fileBlob),
+        inlineDataUrl: await blobToDataUrl(localDoc.fileBlob),
+        inlineEncoding: 'data-url',
+        availability: 'remote-inline-ready'
+      };
+      attachmentSummary.inlineReady += 1;
+    } else {
+      syncItem.attachment = {
+        ...baseAttachment,
+        availability: 'missing-local-copy'
+      };
+      attachmentSummary.metadataOnly += 1;
+    }
+  }
+
+  headRevision.payload.generatedAt = new Date().toISOString();
+  headRevision.payload.contract = {
+    ...(headRevision.payload.contract || {}),
+    attachmentMode: 'inline-data-url-manual-push-v1'
+  };
+  headRevision.payload.snapshot.counts = createSyncPayloadCounts(headRevision.payload.snapshot.docs);
+  headRevision.payloadSignature = createSyncPayloadSignature(headRevision.payload);
+  headRevision.counts = headRevision.payload.snapshot.counts;
+  bundle.state.lastPayloadSignature = headRevision.payloadSignature;
+  bundle.exportedAt = new Date().toISOString();
+
+  return {
+    bundle,
+    headRevision,
+    attachmentSummary
+  };
+}
+
+async function pushRemoteShadowManual() {
+  const comparison = computeRemoteShadowComparison();
+  const readiness = getRemoteShadowPushReadiness(comparison);
+  if (!readiness.canPush) {
+    showToast(readiness.message, readiness.status === 'diverged' || readiness.status === 'other-workspace' ? 'error' : 'info');
+    return false;
+  }
+
+  const attachmentDocs = getAttachmentDocuments(docs);
+  const attachmentHint = attachmentDocs.length > 0
+    ? ` Sutsumu empaquetarà ${attachmentDocs.length} adjunts dins del bundle remot perquè es puguin validar també en un pull segur.`
     : '';
 
   openConfirm(
-    'Aplicar el remot manualment?',
-    `Sutsumu importarà el head remot del ${remoteDate} i substituirà l'estat local visible.${attachmentWarning}`,
+    'Fer push manual al remot?',
+    `Sutsumu enviarà el head local actual al backend remot sense sobreescriure'l si detecta que el head remot ha canviat des de l'última comparació.${attachmentHint}`,
     async () => {
-      const canContinue = await prepareSafetySnapshotOrAbort('before-remote-manual-pull', 'aplicar el remot manualment');
+      const canContinue = await prepareSafetySnapshotOrAbort('before-remote-manual-push', 'fer el push manual al remot');
       if (!canContinue) return;
-      docs = hydrateDocsFromSyncPayload(readiness.syncDocs, docs);
-      expandedFolders = normalizeExpandedFolders(expandedFolders, docs);
-      const remoteWorkspace = readiness.payload?.workspace && typeof readiness.payload.workspace === 'object'
-        ? readiness.payload.workspace
-        : null;
-      workspaceMeta = {
-        id: typeof remoteWorkspace?.id === 'string' && remoteWorkspace.id.trim()
-          ? remoteWorkspace.id.trim()
-          : (workspaceMeta?.id || generateId('workspace')),
-        name: normalizeWorkspaceName(remoteWorkspace?.name || workspaceMeta?.name || 'Sutsumu Workspace'),
-        lastSavedAt: workspaceMeta?.lastSavedAt || '',
-        bindingMode: workspaceHandle ? 'fs' : (workspaceMeta?.bindingMode === 'portable' ? 'portable' : 'local')
-      };
-      workspaceDirty = true;
-      await persistWorkspaceBinding();
-      await saveData('remote-manual-pull');
-      await createShadowRevisionNow('shadow-remote-manual-pull', { silent: true, force: true });
-      renderData();
-      updateRemoteShadowUI();
-      showToast('Remot aplicat localment. Revisa-ho i desa el workspace o el backup extern quan et vagi bé.');
+      try {
+        const pushBundle = await createRemoteManualPushBundle();
+        const response = await fetch(remoteShadowConfig.url, {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            ...buildRemoteProviderAuthHeaders(remoteProviderProfile, remoteProviderSecret)
+          },
+          body: JSON.stringify({
+            schema: REMOTE_MANUAL_PUSH_SCHEMA,
+            workspaceId: pushBundle.headRevision.workspaceId || syncPrepState?.workspace?.id || '',
+            workspaceName: pushBundle.headRevision.workspaceName || syncPrepState?.workspace?.name || 'Sutsumu Workspace',
+            expectedHeadRevisionId: comparison.remoteHead?.revisionId || '',
+            headRevisionId: pushBundle.headRevision.revisionId,
+            payloadSignature: pushBundle.headRevision.payloadSignature,
+            bundle: pushBundle.bundle
+          })
+        });
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            throw createRemoteShadowConnectionError(`Les credencials remotes no permeten fer push (${response.status}).`, 'auth-error');
+          }
+          if (response.status === 404) {
+            throw createRemoteShadowConnectionError('La funció remota de push no existeix o no està publicada (404).', 'not-found');
+          }
+          if (response.status === 409) {
+            throw createRemoteShadowConnectionError("El head remot ha canviat abans del teu push. Torna a comparar abans de reintentar.", 'conflict');
+          }
+          throw createRemoteShadowConnectionError(`No s'ha pogut completar el push remot (${response.status}).`, 'error');
+        }
+        const parsedResponse = await response.json();
+        const descriptor = normalizeRemoteProviderHead(parsedResponse?.head || parsedResponse, remoteShadowConfig.url, remoteProviderProfile);
+        writeRemoteShadowSourceSnapshot({
+          ...pushBundle.bundle,
+          sourceName: descriptor.bundleUrl || remoteShadowConfig.url,
+          importedAt: new Date().toISOString()
+        });
+        writeRemoteShadowConfigSnapshot({
+          mode: 'provider-head-url',
+          url: remoteShadowConfig.url,
+          lastStatus: 'connected',
+          lastFetchedAt: new Date().toISOString(),
+          lastError: '',
+          autoCheckOnStart: true
+        });
+        updateRemoteShadowUI();
+        const pushAttachmentBits = [];
+        if (pushBundle.attachmentSummary.inlineReady > 0) pushAttachmentBits.push(`${pushBundle.attachmentSummary.inlineReady} adjunts empaquetats`);
+        if (pushBundle.attachmentSummary.metadataOnly > 0) pushAttachmentBits.push(`${pushBundle.attachmentSummary.metadataOnly} adjunts només en metadades`);
+        showToast(`Push remot completat.${pushAttachmentBits.length ? ` Adjunts: ${pushAttachmentBits.join(' · ')}.` : ''}`);
+      } catch (err) {
+        if (err?.remoteStatus === 'conflict') {
+          await connectRemoteShadowUrl({ silent: true });
+        }
+        writeRemoteShadowConfigSnapshot({
+          mode: 'provider-head-url',
+          url: remoteShadowConfig?.url || '',
+          lastStatus: err?.remoteStatus || 'error',
+          lastFetchedAt: remoteShadowConfig?.lastFetchedAt || '',
+          lastError: err?.message || 'remote-push-error',
+          autoCheckOnStart: true
+        });
+        showToast(err?.message || "No s'ha pogut completar el push remot.", 'error');
+      }
     },
     {
-      okLabel: 'Aplicar remot',
-      warningText: "Abans de continuar, Sutsumu crearà una còpia crítica de recuperació. Aquesta fase no farà cap pull automàtic ni sobreescriurà el teu workspace extern sense que el desis tu."
+      okLabel: 'Fer push manual',
+      warningText: "Abans de continuar, Sutsumu crearà una còpia crítica de recuperació i només farà el push si el head remot esperat continua sent el mateix.",
+      requireText: 'PUSH'
     }
   );
   return true;
@@ -2245,6 +2748,9 @@ function updateRemoteShadowUI(options = {}) {
   } else if (remoteShadowConfig?.lastStatus === 'auth-error') {
     badgeLabel = 'Auth';
     description = remoteShadowConfig.lastError || 'Les credencials remotes actuals no tenen accés al head.';
+  } else if (remoteShadowConfig?.lastStatus === 'conflict') {
+    badgeLabel = 'Conflicte';
+    description = remoteShadowConfig.lastError || 'El head remot ha canviat i cal tornar a comparar abans del següent push.';
   } else if (remoteShadowConfig?.lastStatus === 'empty') {
     badgeLabel = 'Sense head';
     description = remoteShadowConfig.lastError || 'No hi ha cap head remot disponible per a aquest workspace.';
@@ -2272,6 +2778,16 @@ function updateRemoteShadowUI(options = {}) {
     applyRemoteShadowPullBtn.textContent = comparison.status === 'remote-only' ? 'Importar remot' : 'Aplicar remot';
     applyRemoteShadowPullBtn.title = pullReadiness.canApply ? '' : pullReadiness.message;
   }
+  if (guidedRemotePullBtn) {
+    const guidedReadiness = getGuidedRemoteShadowPullReadiness(comparison);
+    guidedRemotePullBtn.disabled = !guidedReadiness.canGuide;
+    guidedRemotePullBtn.title = guidedReadiness.canGuide ? '' : guidedReadiness.message;
+  }
+  if (pushRemoteShadowBtn) {
+    const pushReadiness = getRemoteShadowPushReadiness(comparison);
+    pushRemoteShadowBtn.disabled = !pushReadiness.canPush;
+    pushRemoteShadowBtn.title = pushReadiness.canPush ? '' : pushReadiness.message;
+  }
   updateRemoteProviderConnectorUI();
   updateRemoteShadowConnectButtonState();
   if (clearRemoteShadowBtn) clearRemoteShadowBtn.disabled = !remoteShadowSource && !remoteShadowConfig;
@@ -2296,7 +2812,7 @@ async function importRemoteShadowBundleFile(file) {
     if (comparison.status === 'remote-ahead') {
       showToast('He detectat un head remot més nou. Encara no faré cap pull automàtic en aquesta fase.', 'info');
     } else if (comparison.status === 'diverged') {
-      showToast('Hi ha divergència entre local i remot. La sync real haurà de resoldre-ho explícitament.', 'info');
+      showToast('Hi ha divergència entre local i remot. Pots usar "Resoldre divergència" per guardar el local i aplicar el remot amb xarxa de seguretat.', 'info');
     }
     return true;
   } catch (err) {
@@ -6411,6 +6927,42 @@ async function applyPendingAppUpdate() {
     });
   }
 
+  function formatSha256Digest(buffer) {
+    const view = new Uint8Array(buffer || []);
+    return `sha256:${Array.from(view).map(value => value.toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  async function computeBlobChecksum(blob) {
+    if (!isRealBlob(blob)) return '';
+    if (window.crypto?.subtle?.digest) {
+      const buffer = await blob.arrayBuffer();
+      return formatSha256Digest(await window.crypto.subtle.digest('SHA-256', buffer));
+    }
+    return `fallback:${createFastStateHash(await blobToDataUrl(blob) || '')}`;
+  }
+
+  function normalizeChecksumValue(value = '') {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  async function validateRemoteAttachmentBlob(blob, attachment = {}) {
+    if (!isRealBlob(blob)) {
+      throw new Error("El binari remot no s'ha pogut reconstruir.");
+    }
+    const expectedSize = Number(attachment.fileSize || 0);
+    if (expectedSize > 0 && blob.size !== expectedSize) {
+      throw new Error(`L'adjunt remot ${attachment.fileName || 'sense nom'} no coincideix amb la mida esperada.`);
+    }
+    const expectedChecksum = normalizeChecksumValue(attachment.checksum || '');
+    if (expectedChecksum) {
+      const receivedChecksum = normalizeChecksumValue(await computeBlobChecksum(blob));
+      if (expectedChecksum !== receivedChecksum) {
+        throw new Error(`L'adjunt remot ${attachment.fileName || 'sense nom'} ha fallat la verificació d'integritat.`);
+      }
+    }
+    return blob;
+  }
+
   async function serializeDocsForFullBackup(items) {
     const normalizedItems = normalizeDocs(items);
     const result = [];
@@ -6596,7 +7148,10 @@ async function applyPendingAppUpdate() {
       'manual-export-zip': 'Exportació ZIP segura',
       'restore-full-history': "Restauració d'un backup intern",
       'before-remote-manual-pull': "Abans d'aplicar el remot manualment",
-      'remote-manual-pull': 'Aplicació manual del remot'
+      'remote-manual-pull': 'Aplicació manual del remot',
+      'before-remote-guided-pull': 'Abans de resoldre divergència amb el remot',
+      'remote-guided-pull': 'Resolució guiada del remot',
+      'before-remote-manual-push': 'Abans de fer push manual al remot'
     };
     return labels[reason] || `Canvi desat (${reason})`;
   }
@@ -7577,7 +8132,9 @@ async function applyPendingAppUpdate() {
   });
   connectRemoteShadowUrlBtn?.addEventListener('click', () => connectRemoteShadowUrl({ silent: false }));
   importRemoteShadowBtn?.addEventListener('click', promptRemoteShadowImport);
+  guidedRemotePullBtn?.addEventListener('click', applyGuidedRemoteShadowPull);
   applyRemoteShadowPullBtn?.addEventListener('click', applyRemoteShadowPull);
+  pushRemoteShadowBtn?.addEventListener('click', pushRemoteShadowManual);
   clearRemoteShadowBtn?.addEventListener('click', clearRemoteShadowSource);
   recheckRemoteShadowBtn?.addEventListener('click', () => {
     if (remoteShadowConfig?.url) {
@@ -7964,10 +8521,10 @@ async function applyPendingAppUpdate() {
     queueSurvivalAttachmentMirrorSync();
     updateTargetSelects();
     queueAutomaticFullBackup(reason);
-    if (reason !== 'remote-manual-pull') {
+    if (!['remote-manual-pull', 'remote-guided-pull'].includes(reason)) {
       queueExternalBackupAutosave(reason);
     }
-    if (reason !== 'workspace-open' && reason !== 'remote-manual-pull') {
+    if (reason !== 'workspace-open' && !['remote-manual-pull', 'remote-guided-pull'].includes(reason)) {
       queueWorkspaceAutosave(reason);
     }
     updateBackupStatusUI();
