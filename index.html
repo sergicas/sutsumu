@@ -394,6 +394,37 @@
                       <input id="remoteShadowUrl" type="url" placeholder="https://.../shadow-bundle.json o /shadow-bundle.json" autocomplete="off" />
                       <button id="connectRemoteShadowUrlBtn" type="button" class="btn btn-secondary btn-small" disabled>Connectar URL</button>
                     </div>
+                    <div id="remoteProviderProfileCard" class="sync-remote-provider-card hidden">
+                      <div class="sync-prep-list-label">Perfil backend local</div>
+                      <p id="remoteProviderProfileHint" class="sync-prep-text">Aquest perfil es queda només en aquest dispositiu i només serveix per llegir el head remot de manera segura.</p>
+                      <div class="sync-remote-provider-grid">
+                        <label class="sync-remote-field">
+                          <span>Preset</span>
+                          <select id="remoteProviderPreset" class="custom-select">
+                            <option value="none">Sense auth</option>
+                            <option value="bearer">Bearer token</option>
+                            <option value="header">Capçalera API</option>
+                            <option value="supabase">Supabase públic</option>
+                          </select>
+                        </label>
+                        <label id="remoteProviderHeaderNameWrap" class="sync-remote-field hidden">
+                          <span>Nom capçalera</span>
+                          <input id="remoteProviderHeaderName" type="text" placeholder="x-api-key" autocomplete="off" />
+                        </label>
+                        <label id="remoteProviderPublicKeyWrap" class="sync-remote-field hidden">
+                          <span>Anon key pública</span>
+                          <input id="remoteProviderPublicKey" type="password" placeholder="eyJ..." autocomplete="off" />
+                        </label>
+                        <label id="remoteProviderSecretWrap" class="sync-remote-field sync-remote-field-wide hidden">
+                          <span id="remoteProviderSecretLabel">Token</span>
+                          <input id="remoteProviderSecret" type="password" placeholder="Introdueix el token local del backend" autocomplete="off" />
+                        </label>
+                        <label id="remoteProviderRememberWrap" class="sync-remote-checkbox hidden">
+                          <input id="remoteProviderRememberSecret" type="checkbox" />
+                          <span>Recordar aquest valor només en aquest dispositiu</span>
+                        </label>
+                      </div>
+                    </div>
                     <div class="sync-prep-actions">
                       <button id="importRemoteShadowBtn" type="button" class="btn btn-secondary btn-small">Importar bundle remot</button>
                       <button id="recheckRemoteShadowBtn" type="button" class="btn btn-secondary btn-small" disabled>Comparar ara</button>

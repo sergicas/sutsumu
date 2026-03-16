@@ -2046,6 +2046,56 @@ ul.doc-list {
   flex: 0 0 180px;
 }
 
+.sync-remote-provider-card {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(37, 99, 235, 0.12);
+}
+
+.sync-remote-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.sync-remote-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sync-remote-field span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.sync-remote-field input,
+.sync-remote-field select {
+  min-width: 0;
+}
+
+.sync-remote-field-wide {
+  grid-column: 1 / -1;
+}
+
+.sync-remote-checkbox {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.sync-remote-checkbox input {
+  width: 16px;
+  height: 16px;
+}
+
 @media (max-width: 760px) {
   .sync-prep-grid,
   .sync-prep-lists {
@@ -2054,6 +2104,10 @@ ul.doc-list {
 
   .sync-remote-url-row {
     flex-direction: column;
+  }
+
+  .sync-remote-provider-grid {
+    grid-template-columns: 1fr;
   }
 }
 

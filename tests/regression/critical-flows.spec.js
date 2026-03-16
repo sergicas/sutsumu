@@ -268,6 +268,87 @@ test('connects a provider head endpoint and resolves the remote bundle safely', 
   await remoteContext.close();
 });
 
+test('connects a Supabase-ready provider profile and keeps local auth after reload', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio Supabase Head',
+    content: 'Perfil local amb auth preparada per backend real',
+    tags: 'supabase, provider'
+  });
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('provider-supabase-bundle.json');
+  await exportDownload.saveAs(bundlePath);
+  const bundleBody = require('fs').readFileSync(bundlePath, 'utf8');
+  const bundle = JSON.parse(bundleBody);
+  const latestRevision = bundle.revisions[0];
+
+  const headRequests = [];
+  const bundleRequests = [];
+  const remoteContext = await browser.newContext();
+  await remoteContext.route('https://supabase.example/head.json', route => {
+    headRequests.push(route.request().headers());
+    return route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*'
+      },
+      body: JSON.stringify({
+        schema: 'sutsumu-cloud-sync-provider-head',
+        provider: 'supabase-rest',
+        workspaceId: latestRevision.workspaceId,
+        workspaceName: latestRevision.workspaceName,
+        headRevisionId: latestRevision.revisionId,
+        payloadSignature: latestRevision.payloadSignature,
+        bundleUrl: 'https://supabase.example/bundle.json'
+      })
+    });
+  });
+  await remoteContext.route('https://supabase.example/bundle.json', route => {
+    bundleRequests.push(route.request().headers());
+    return route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*'
+      },
+      body: bundleBody
+    });
+  });
+
+  const remotePage = await remoteContext.newPage();
+  await gotoApp(remotePage);
+  await remotePage.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await remotePage.locator('#remoteProviderPreset').selectOption('supabase');
+  await remotePage.locator('#remoteProviderPublicKey').fill('public-anon-key');
+  await remotePage.locator('#remoteProviderSecret').fill('user-session-token');
+  await remotePage.locator('#remoteProviderRememberSecret').check();
+  await remotePage.locator('#remoteShadowUrl').fill('https://supabase.example/head.json');
+  await remotePage.locator('#connectRemoteShadowUrlBtn').click();
+  await expectToast(remotePage, 'URL remota connectada');
+  await expect(remotePage.locator('#syncRemoteSourceValue')).toContainText('head:https://supabase.example/head.json');
+
+  expect(headRequests[0].apikey).toBe('public-anon-key');
+  expect(headRequests[0].authorization).toBe('Bearer user-session-token');
+  expect(bundleRequests[0].apikey).toBe('public-anon-key');
+  expect(bundleRequests[0].authorization).toBe('Bearer user-session-token');
+
+  await remotePage.reload();
+  await expect(remotePage.locator('#syncRemoteSourceValue')).toContainText('head:https://supabase.example/head.json');
+  await expect(remotePage.locator('#syncRemoteBadge')).not.toContainText('Sense remot');
+  expect(headRequests.length).toBeGreaterThanOrEqual(2);
+
+  await remoteContext.close();
+});
+
 test('writes an automatic external backup and keeps the last good copy if the app becomes empty', async ({ page }) => {
   await installExternalBackupStub(page);
   await gotoApp(page);
