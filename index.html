@@ -397,6 +397,22 @@
                     <div id="remoteProviderProfileCard" class="sync-remote-provider-card hidden">
                       <div class="sync-prep-list-label">Perfil backend local</div>
                       <p id="remoteProviderProfileHint" class="sync-prep-text">Aquest perfil es queda només en aquest dispositiu i només serveix per llegir el head remot de manera segura.</p>
+                      <div class="sync-remote-connector-row">
+                        <label class="sync-remote-field">
+                          <span>Connector guardat</span>
+                          <select id="remoteProviderConnectorSelect" class="custom-select">
+                            <option value="">Connector actual</option>
+                          </select>
+                        </label>
+                        <label class="sync-remote-field">
+                          <span>Nom del connector</span>
+                          <input id="remoteProviderConnectorName" type="text" placeholder="ex: Supabase Produccio" autocomplete="off" />
+                        </label>
+                        <div class="sync-remote-connector-actions">
+                          <button id="saveRemoteProviderConnectorBtn" type="button" class="btn btn-secondary btn-small">Desar connector</button>
+                          <button id="deleteRemoteProviderConnectorBtn" type="button" class="btn btn-danger-ghost btn-small" disabled>Eliminar</button>
+                        </div>
+                      </div>
                       <div class="sync-remote-provider-grid">
                         <label class="sync-remote-field">
                           <span>Preset</span>

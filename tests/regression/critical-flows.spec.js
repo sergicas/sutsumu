@@ -691,6 +691,41 @@ test('resolves an authenticated Supabase storage path and forwards auth headers'
   await remoteContext.close();
 });
 
+test('saves, reapplies and restores a local backend connector profile after reload', async ({ page }) => {
+  await gotoApp(page);
+
+  await page.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await page.locator('#remoteProviderPreset').selectOption('supabase');
+  await page.locator('#remoteProviderPublicKey').fill('public-anon-key');
+  await page.locator('#remoteProviderBaseUrl').fill('https://prod.supabase.co');
+  await page.locator('#remoteProviderWorkspaceId').fill('workspace-prod');
+  await page.locator('#remoteProviderSecret').fill('session-prod-token');
+  await page.locator('#remoteProviderRememberSecret').check();
+  await page.locator('#remoteProviderConnectorName').fill('Supabase Produccio');
+  await page.locator('#saveRemoteProviderConnectorBtn').click();
+  await expectToast(page, 'Connector remot desat: Supabase Produccio');
+
+  await expect(page.locator('#remoteProviderConnectorSelect')).toHaveValue(/.+/);
+
+  await page.locator('#remoteProviderBaseUrl').fill('https://other.supabase.co');
+  await page.locator('#remoteProviderWorkspaceId').fill('workspace-alt');
+  await page.locator('#remoteProviderSecret').fill('other-token');
+  await page.locator('#remoteProviderConnectorSelect').selectOption({ label: 'Supabase Produccio' });
+  await expectToast(page, 'Connector remot aplicat: Supabase Produccio');
+
+  await expect(page.locator('#remoteProviderBaseUrl')).toHaveValue('https://prod.supabase.co');
+  await expect(page.locator('#remoteProviderWorkspaceId')).toHaveValue('workspace-prod');
+  await expect(page.locator('#remoteProviderSecret')).toHaveValue('session-prod-token');
+
+  await page.reload();
+  await expect(page.locator('#remoteProviderConnectorSelect')).toHaveValue(/.+/);
+  await expect(page.locator('#remoteProviderConnectorSelect')).toContainText('Supabase Produccio');
+  await page.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await expect(page.locator('#remoteProviderBaseUrl')).toHaveValue('https://prod.supabase.co');
+  await expect(page.locator('#remoteProviderWorkspaceId')).toHaveValue('workspace-prod');
+  await expect(page.locator('#remoteProviderSecret')).toHaveValue('session-prod-token');
+});
+
 test('writes an automatic external backup and keeps the last good copy if the app becomes empty', async ({ page }) => {
   await installExternalBackupStub(page);
   await gotoApp(page);

@@ -5,6 +5,7 @@ Aquesta fase afegeix una capa local de credencials per a la lectura segura del `
 ### Queda resolt ara
 
 - El dispositiu pot guardar un perfil remot local per a `Head backend`.
+- El dispositiu pot desar diversos connectors remots reutilitzables i reaplicar-los sense reescriure cada camp.
 - El perfil pot funcionar en quatre presets:
   - `Sense auth`
   - `Bearer token`
@@ -28,8 +29,9 @@ Aquesta fase afegeix una capa local de credencials per a la lectura segura del `
 1. Triar `Head backend`.
 2. Escollir el preset local.
 3. Introduir les credencials mínimes.
-4. Connectar la URL del `head`.
-5. Comparar el `head` remot amb el local.
+4. Si vols, desar aquest conjunt com a connector remot reutilitzable.
+5. Connectar la URL del `head`.
+6. Comparar el `head` remot amb el local.
 
 ### El següent pas segur
 

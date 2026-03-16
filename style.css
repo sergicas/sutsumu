@@ -2054,6 +2054,19 @@ ul.doc-list {
   border: 1px solid rgba(37, 99, 235, 0.12);
 }
 
+.sync-remote-connector-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.sync-remote-connector-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .sync-remote-provider-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2106,8 +2119,13 @@ ul.doc-list {
     flex-direction: column;
   }
 
+  .sync-remote-connector-row,
   .sync-remote-provider-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sync-remote-connector-actions {
+    width: 100%;
   }
 }
 
