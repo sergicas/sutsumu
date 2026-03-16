@@ -1,0 +1,4 @@
+project_id = "sutsumu-local"
+
+[functions.sutsumu-head]
+verify_jwt = false

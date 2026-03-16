@@ -11,6 +11,9 @@ Ara Sutsumu pot llegir remot en dos modes:
 - `Bundle directe`
 - `Head backend`
 
+Dins de `Head backend`, ara pot construir tant una consulta `Supabase/PostgREST`
+com una URL viva de `Supabase Edge Function`.
+
 ## Bundle Directe
 
 La URL retorna directament:
@@ -58,6 +61,20 @@ La consulta REST es prepara amb:
 - filtre `local_workspace_id=eq.<id>`
 - `limit=1`
 
+## Supabase Edge Function
+
+Si el preset es `Supabase Edge Function`, Sutsumu pot construir:
+
+- `https://<project>.supabase.co/functions/v1/<funcio>?workspace_id=<id>`
+
+i enviar la `shared key` local en:
+
+- `x-sutsumu-key`
+
+Aquest mode esta pensat per a una funcio read-only que retorni directament:
+
+- `sutsumu-cloud-sync-provider-head`
+
 ## Respostes Reals Que Ara Queden Cobertes
 
 - `200` amb fila valida: connexio correcta
@@ -93,6 +110,7 @@ Això ja s'assembla molt més a un backend real.
 Ens permet preparar:
 
 - Supabase
+- Supabase Edge Functions
 - un endpoint REST propi
 - un servei intermedi
 

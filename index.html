@@ -421,6 +421,7 @@
                             <option value="bearer">Bearer token</option>
                             <option value="header">Capçalera API</option>
                             <option value="supabase">Supabase públic</option>
+                            <option value="supabase-function">Supabase Edge Function</option>
                           </select>
                         </label>
                         <label id="remoteProviderHeaderNameWrap" class="sync-remote-field hidden">
@@ -434,6 +435,10 @@
                         <label id="remoteProviderBaseUrlWrap" class="sync-remote-field sync-remote-field-wide hidden">
                           <span>URL projecte o REST</span>
                           <input id="remoteProviderBaseUrl" type="url" placeholder="https://project.supabase.co o .../rest/v1" autocomplete="off" />
+                        </label>
+                        <label id="remoteProviderFunctionNameWrap" class="sync-remote-field hidden">
+                          <span>Nom funcio</span>
+                          <input id="remoteProviderFunctionName" type="text" placeholder="sutsumu-head" autocomplete="off" />
                         </label>
                         <label id="remoteProviderHeadTableWrap" class="sync-remote-field hidden">
                           <span>Taula o vista head</span>

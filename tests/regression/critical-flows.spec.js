@@ -493,6 +493,82 @@ test('builds a Supabase REST head query from project settings safely', async ({ 
   await remoteContext.close();
 });
 
+test('connects a Supabase Edge Function head with a shared key safely', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio Supabase Edge',
+    content: 'Head remot real via Edge Function read-only',
+    tags: 'supabase, edge'
+  });
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('provider-supabase-edge-bundle.json');
+  await exportDownload.saveAs(bundlePath);
+  const bundleBody = require('fs').readFileSync(bundlePath, 'utf8');
+  const bundle = JSON.parse(bundleBody);
+  const latestRevision = bundle.revisions[0];
+
+  let capturedUrl = '';
+  let capturedHeaders = null;
+  const remoteContext = await browser.newContext();
+  await remoteContext.route('https://edge.supabase.co/functions/v1/sutsumu-head*', route => {
+    capturedUrl = route.request().url();
+    capturedHeaders = route.request().headers();
+    return route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*'
+      },
+      body: JSON.stringify({
+        schema: 'sutsumu-cloud-sync-provider-head',
+        provider: 'supabase-edge-function',
+        workspaceId: latestRevision.workspaceId,
+        workspaceName: latestRevision.workspaceName,
+        headRevisionId: latestRevision.revisionId,
+        payloadSignature: latestRevision.payloadSignature,
+        bundleUrl: 'https://edge.supabase.co/storage/v1/object/sign/sutsumu-sync/workspaces/main-shadow.json?token=signed'
+      })
+    });
+  });
+  await remoteContext.route('https://edge.supabase.co/storage/v1/object/sign/sutsumu-sync/workspaces/main-shadow.json?token=signed', route => route.fulfill({
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*'
+    },
+    body: bundleBody
+  }));
+
+  const remotePage = await remoteContext.newPage();
+  await gotoApp(remotePage);
+  await remotePage.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await remotePage.locator('#remoteProviderPreset').selectOption('supabase-function');
+  await remotePage.locator('#remoteProviderBaseUrl').fill('https://edge.supabase.co');
+  await remotePage.locator('#remoteProviderFunctionName').fill('sutsumu-head');
+  await remotePage.locator('#remoteProviderWorkspaceId').fill(latestRevision.workspaceId);
+  await remotePage.locator('#remoteProviderSecret').fill('shared-edge-key');
+  await remotePage.locator('#remoteShadowUrl').fill('');
+  await remotePage.locator('#connectRemoteShadowUrlBtn').click();
+
+  await expectToast(remotePage, 'URL remota connectada');
+  await expect(remotePage.locator('#syncRemoteBadge')).toContainText('Remot disponible');
+
+  const builtUrl = new URL(capturedUrl);
+  expect(builtUrl.pathname).toBe('/functions/v1/sutsumu-head');
+  expect(builtUrl.searchParams.get('workspace_id')).toBe(latestRevision.workspaceId);
+  expect(capturedHeaders['x-sutsumu-key']).toBe('shared-edge-key');
+
+  await remoteContext.close();
+});
+
 test('shows a clear empty-head state when the backend returns no workspace row', async ({ page, browser }) => {
   await gotoApp(page);
 

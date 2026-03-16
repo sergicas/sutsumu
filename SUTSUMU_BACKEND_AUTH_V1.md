@@ -11,6 +11,7 @@ Aquesta fase afegeix una capa local de credencials per a la lectura segura del `
   - `Bearer token`
   - `Capçalera API`
   - `Supabase públic`
+- El perfil ja pot funcionar tambe com a `Supabase Edge Function` amb `shared key` local.
 - El mode `Supabase públic` envia:
   - `apikey: <anon key>`
   - `Authorization: Bearer <access token o anon key>`
@@ -32,6 +33,10 @@ Aquesta fase afegeix una capa local de credencials per a la lectura segura del `
 4. Si vols, desar aquest conjunt com a connector remot reutilitzable.
 5. Connectar la URL del `head`.
 6. Comparar el `head` remot amb el local.
+
+Per a la primera configuracio real de Supabase en mode nomes lectura:
+
+`SUTSUMU_SUPABASE_EDGE_SETUP_V1.md`
 
 ### El següent pas segur
 
