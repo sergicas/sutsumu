@@ -21,11 +21,12 @@ La URL retorna directament:
 
 ## Head Backend
 
-La URL retorna un descriptor:
+La URL pot retornar:
 
-- `sutsumu-cloud-sync-provider-head`
+- un descriptor `sutsumu-cloud-sync-provider-head`
+- o una fila compatible de backend, per exemple una resposta `PostgREST`
 
-amb aquests camps principals:
+amb aquests camps principals, en `camelCase` o `snake_case`:
 
 - `provider`
 - `workspaceId`
@@ -35,6 +36,14 @@ amb aquests camps principals:
 - `bundleUrl`
 
 Sutsumu llegeix primer aquest `head` i després resol el `bundleUrl`.
+
+En una resposta tipus `Supabase/PostgREST`, això vol dir que també pot entendre camps com:
+
+- `workspace_id`
+- `name`
+- `current_revision_id`
+- `payload_signature`
+- `bundle_url`
 
 ## Per Que És Important
 

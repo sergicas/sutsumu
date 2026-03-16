@@ -349,6 +349,73 @@ test('connects a Supabase-ready provider profile and keeps local auth after relo
   await remoteContext.close();
 });
 
+test('connects a PostgREST-style Supabase head row safely', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio Supabase PostgREST',
+    content: 'Resposta row-style compatible amb backend real',
+    tags: 'supabase, postgrest'
+  });
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('provider-postgrest-bundle.json');
+  await exportDownload.saveAs(bundlePath);
+  const bundleBody = require('fs').readFileSync(bundlePath, 'utf8');
+  const bundle = JSON.parse(bundleBody);
+  const latestRevision = bundle.revisions[0];
+
+  const headRequests = [];
+  const remoteContext = await browser.newContext();
+  await remoteContext.route('https://postgrest.example/head', route => {
+    headRequests.push(route.request().headers());
+    return route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*'
+      },
+      body: JSON.stringify([{
+        provider: 'supabase-rest',
+        workspace_id: latestRevision.workspaceId,
+        name: latestRevision.workspaceName,
+        current_revision_id: latestRevision.revisionId,
+        payload_signature: latestRevision.payloadSignature,
+        bundle_url: 'https://postgrest.example/bundle.json'
+      }])
+    });
+  });
+  await remoteContext.route('https://postgrest.example/bundle.json', route => route.fulfill({
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*'
+    },
+    body: bundleBody
+  }));
+
+  const remotePage = await remoteContext.newPage();
+  await gotoApp(remotePage);
+  await remotePage.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await remotePage.locator('#remoteProviderPreset').selectOption('supabase');
+  await remotePage.locator('#remoteProviderPublicKey').fill('public-anon-key');
+  await remotePage.locator('#remoteShadowUrl').fill('https://postgrest.example/head');
+  await remotePage.locator('#connectRemoteShadowUrlBtn').click();
+  await expectToast(remotePage, 'URL remota connectada');
+  await expect(remotePage.locator('#syncRemoteBadge')).toContainText('Remot disponible');
+  await expect(remotePage.locator('#syncRemoteSourceValue')).toContainText('head:https://postgrest.example/head');
+  expect(headRequests[0].apikey).toBe('public-anon-key');
+  expect(headRequests[0].authorization).toBe('Bearer public-anon-key');
+
+  await remoteContext.close();
+});
+
 test('writes an automatic external backup and keeps the last good copy if the app becomes empty', async ({ page }) => {
   await installExternalBackupStub(page);
   await gotoApp(page);

@@ -1365,7 +1365,7 @@ function updateRemoteProviderModeUI() {
   }
   if (remoteProviderProfileHintEl) {
     if (effectivePreset === 'supabase') {
-      remoteProviderProfileHintEl.textContent = "Mode preparat per Supabase: enviarà apikey i Authorization per llegir el head remot sense fer encara cap pull o push.";
+      remoteProviderProfileHintEl.textContent = "Mode preparat per Supabase: enviarà apikey i Authorization i també acceptarà una fila PostgREST o un descriptor head remot sense fer encara cap pull o push.";
     } else if (effectivePreset === 'header') {
       remoteProviderProfileHintEl.textContent = 'Mode capçalera API: el nom i valor de la capçalera només es fan servir en aquest dispositiu.';
     } else if (effectivePreset === 'bearer') {
@@ -1377,22 +1377,52 @@ function updateRemoteProviderModeUI() {
   updateRemoteShadowConnectButtonState();
 }
 
+function unwrapRemoteProviderHeadCandidate(rawHead) {
+  if (!rawHead) return null;
+  if (Array.isArray(rawHead)) {
+    return rawHead[0] && typeof rawHead[0] === 'object' ? rawHead[0] : null;
+  }
+  if (typeof rawHead !== 'object') return null;
+  if (rawHead.schema === REMOTE_PROVIDER_HEAD_SCHEMA) return rawHead;
+  if (Array.isArray(rawHead.data)) {
+    return rawHead.data[0] && typeof rawHead.data[0] === 'object' ? rawHead.data[0] : null;
+  }
+  if (rawHead.data && typeof rawHead.data === 'object') {
+    return rawHead.data;
+  }
+  if (rawHead.record && typeof rawHead.record === 'object') {
+    return rawHead.record;
+  }
+  return rawHead;
+}
+
+function readRemoteProviderHeadField(candidate, keys = []) {
+  for (const key of keys) {
+    const value = candidate?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
 function normalizeRemoteProviderHead(rawHead, sourceUrl = '') {
-  if (!rawHead || typeof rawHead !== 'object' || rawHead.schema !== REMOTE_PROVIDER_HEAD_SCHEMA) {
+  const candidate = unwrapRemoteProviderHeadCandidate(rawHead);
+  if (!candidate || typeof candidate !== 'object') {
     throw new Error('La URL remota no retorna un head provider compatible.');
   }
-  const rawBundleUrl = typeof rawHead.bundleUrl === 'string' && rawHead.bundleUrl.trim() ? rawHead.bundleUrl.trim() : '';
+  const rawBundleUrl = candidate.schema === REMOTE_PROVIDER_HEAD_SCHEMA
+    ? readRemoteProviderHeadField(candidate, ['bundleUrl'])
+    : readRemoteProviderHeadField(candidate, ['bundleUrl', 'bundle_url', 'shadowBundleUrl', 'shadow_bundle_url']);
   if (!rawBundleUrl) throw new Error('El head remot no inclou cap bundleUrl.');
   const resolvedBundleUrl = new URL(rawBundleUrl, sourceUrl || window.location.href).toString();
   return {
     schema: REMOTE_PROVIDER_HEAD_SCHEMA,
-    provider: typeof rawHead.provider === 'string' && rawHead.provider.trim() ? rawHead.provider.trim() : 'generic-rest',
-    workspaceId: typeof rawHead.workspaceId === 'string' ? rawHead.workspaceId : '',
-    workspaceName: typeof rawHead.workspaceName === 'string' ? rawHead.workspaceName : '',
-    headRevisionId: typeof rawHead.headRevisionId === 'string' ? rawHead.headRevisionId : '',
-    payloadSignature: typeof rawHead.payloadSignature === 'string' ? rawHead.payloadSignature : '',
+    provider: readRemoteProviderHeadField(candidate, ['provider', 'provider_name']) || (candidate.schema === REMOTE_PROVIDER_HEAD_SCHEMA ? 'generic-rest' : 'supabase-rest'),
+    workspaceId: readRemoteProviderHeadField(candidate, ['workspaceId', 'workspace_id', 'localWorkspaceId', 'local_workspace_id']),
+    workspaceName: readRemoteProviderHeadField(candidate, ['workspaceName', 'workspace_name', 'name']),
+    headRevisionId: readRemoteProviderHeadField(candidate, ['headRevisionId', 'head_revision_id', 'currentRevisionId', 'current_revision_id']),
+    payloadSignature: readRemoteProviderHeadField(candidate, ['payloadSignature', 'payload_signature']),
     bundleUrl: resolvedBundleUrl,
-    fetchedAt: typeof rawHead.fetchedAt === 'string' ? rawHead.fetchedAt : new Date().toISOString()
+    fetchedAt: readRemoteProviderHeadField(candidate, ['fetchedAt', 'fetched_at', 'updatedAt', 'updated_at']) || new Date().toISOString()
   };
 }
 
