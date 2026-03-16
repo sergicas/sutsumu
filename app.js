@@ -1301,6 +1301,27 @@ function normalizeSupabaseRestBaseUrl(baseUrl) {
   return parsed;
 }
 
+function normalizeSupabaseProjectBaseUrl(baseUrl) {
+  const restUrl = normalizeSupabaseRestBaseUrl(baseUrl);
+  const path = restUrl.pathname.replace(/\/+$/, '');
+  restUrl.pathname = path.endsWith('/rest/v1') ? path.slice(0, -8) || '/' : path || '/';
+  restUrl.search = '';
+  restUrl.hash = '';
+  return restUrl;
+}
+
+function buildSupabaseStorageObjectUrl(baseUrl, storagePath, access = 'public') {
+  const normalizedPath = String(storagePath || '').trim().replace(/^\/+/, '');
+  if (!normalizedPath) {
+    throw new Error('Falta la ruta de storage del bundle remot.');
+  }
+  const base = normalizeSupabaseProjectBaseUrl(baseUrl);
+  const accessSegment = access === 'authenticated' ? 'authenticated' : 'public';
+  const encodedPath = normalizedPath.split('/').map(part => encodeURIComponent(part)).join('/');
+  base.pathname = `${base.pathname.replace(/\/+$/, '')}/storage/v1/object/${accessSegment}/${encodedPath}`;
+  return base.toString();
+}
+
 function buildSupabaseHeadUrl(profile = getDraftRemoteProviderProfile()) {
   const normalized = normalizeRemoteProviderProfile(profile);
   if (!canBuildSupabaseHeadUrl(normalized)) {
@@ -1309,7 +1330,7 @@ function buildSupabaseHeadUrl(profile = getDraftRemoteProviderProfile()) {
   const baseUrl = normalizeSupabaseRestBaseUrl(normalized.baseUrl);
   const safeTable = encodeURIComponent((normalized.headTable || 'sutsumu_workspace_heads').replace(/^\/+/, ''));
   baseUrl.pathname = `${baseUrl.pathname.replace(/\/+$/, '')}/${safeTable}`;
-  baseUrl.searchParams.set('select', 'provider,local_workspace_id,name,current_revision_id,payload_signature,bundle_url,updated_at');
+  baseUrl.searchParams.set('select', 'provider,local_workspace_id,name,current_revision_id,payload_signature,bundle_url,bundle_storage_path,bundle_access,updated_at');
   baseUrl.searchParams.set('local_workspace_id', `eq.${normalized.workspaceId}`);
   baseUrl.searchParams.set('limit', '1');
   return baseUrl.toString();
@@ -1479,7 +1500,7 @@ function createRemoteShadowConnectionError(message, remoteStatus = 'error') {
   return err;
 }
 
-function normalizeRemoteProviderHead(rawHead, sourceUrl = '') {
+function normalizeRemoteProviderHead(rawHead, sourceUrl = '', providerProfile = remoteProviderProfile) {
   if (Array.isArray(rawHead) && rawHead.length === 0) {
     throw createRemoteShadowConnectionError('No hi ha cap head remot per a aquest workspace.', 'empty');
   }
@@ -1490,19 +1511,34 @@ function normalizeRemoteProviderHead(rawHead, sourceUrl = '') {
   if (!candidate || typeof candidate !== 'object') {
     throw new Error('La URL remota no retorna un head provider compatible.');
   }
+  const providerName = readRemoteProviderHeadField(candidate, ['provider', 'provider_name']) || (candidate.schema === REMOTE_PROVIDER_HEAD_SCHEMA ? 'generic-rest' : 'supabase-rest');
   const rawBundleUrl = candidate.schema === REMOTE_PROVIDER_HEAD_SCHEMA
     ? readRemoteProviderHeadField(candidate, ['bundleUrl'])
     : readRemoteProviderHeadField(candidate, ['bundleUrl', 'bundle_url', 'shadowBundleUrl', 'shadow_bundle_url']);
-  if (!rawBundleUrl) throw new Error('El head remot no inclou cap bundleUrl.');
-  const resolvedBundleUrl = new URL(rawBundleUrl, sourceUrl || window.location.href).toString();
+  const rawBundleStoragePath = readRemoteProviderHeadField(candidate, ['bundleStoragePath', 'bundle_storage_path', 'shadowBundlePath', 'shadow_bundle_path']);
+  const bundleAccess = readRemoteProviderHeadField(candidate, ['bundleAccess', 'bundle_access', 'storageAccess', 'storage_access']) || 'public';
+  let resolvedBundleUrl = '';
+  if (rawBundleUrl) {
+    resolvedBundleUrl = new URL(rawBundleUrl, sourceUrl || window.location.href).toString();
+  } else if (rawBundleStoragePath && providerName === 'supabase-rest') {
+    const profileBaseUrl = normalizeRemoteProviderProfile(providerProfile).baseUrl || sourceUrl;
+    if (!profileBaseUrl) {
+      throw new Error('El head remot inclou bundle_storage_path però falta la base URL de Supabase per resoldre-la.');
+    }
+    resolvedBundleUrl = buildSupabaseStorageObjectUrl(profileBaseUrl, rawBundleStoragePath, bundleAccess);
+  } else {
+    throw new Error('El head remot no inclou cap bundleUrl o bundle_storage_path compatible.');
+  }
   return {
     schema: REMOTE_PROVIDER_HEAD_SCHEMA,
-    provider: readRemoteProviderHeadField(candidate, ['provider', 'provider_name']) || (candidate.schema === REMOTE_PROVIDER_HEAD_SCHEMA ? 'generic-rest' : 'supabase-rest'),
+    provider: providerName,
     workspaceId: readRemoteProviderHeadField(candidate, ['workspaceId', 'workspace_id', 'localWorkspaceId', 'local_workspace_id']),
     workspaceName: readRemoteProviderHeadField(candidate, ['workspaceName', 'workspace_name', 'name']),
     headRevisionId: readRemoteProviderHeadField(candidate, ['headRevisionId', 'head_revision_id', 'currentRevisionId', 'current_revision_id']),
     payloadSignature: readRemoteProviderHeadField(candidate, ['payloadSignature', 'payload_signature']),
     bundleUrl: resolvedBundleUrl,
+    bundleStoragePath: rawBundleStoragePath,
+    bundleAccess,
     fetchedAt: readRemoteProviderHeadField(candidate, ['fetchedAt', 'fetched_at', 'updatedAt', 'updated_at']) || new Date().toISOString()
   };
 }
@@ -1545,7 +1581,7 @@ async function fetchRemoteShadowBundleFromProviderHead(url, providerProfile = re
     }
     throw createRemoteShadowConnectionError(`No s'ha pogut llegir el head remot (${response.status}).`, 'error');
   }
-  const parsedHead = normalizeRemoteProviderHead(await response.json(), url);
+  const parsedHead = normalizeRemoteProviderHead(await response.json(), url, providerProfile);
   const cachedHead = getShadowHistoryHead(remoteShadowSource?.revisions || [], remoteShadowSource?.state?.lastRevisionId || '');
   if (cachedHead && parsedHead.headRevisionId && cachedHead.revisionId === parsedHead.headRevisionId) {
     return {

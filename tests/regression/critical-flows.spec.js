@@ -486,6 +486,7 @@ test('builds a Supabase REST head query from project settings safely', async ({ 
   expect(builtUrl.searchParams.get('local_workspace_id')).toBe(`eq.${latestRevision.workspaceId}`);
   expect(builtUrl.searchParams.get('limit')).toBe('1');
   expect(builtUrl.searchParams.get('select')).toContain('local_workspace_id');
+  expect(builtUrl.searchParams.get('select')).toContain('bundle_storage_path');
   expect(capturedHeaders.apikey).toBe('public-anon-key');
   expect(capturedHeaders.authorization).toBe('Bearer public-anon-key');
 
@@ -548,6 +549,144 @@ test('shows a clear auth state when the backend rejects the remote credentials',
   await expectToast(remotePage, 'Les credencials remotes no tenen accés al head (401).');
   await expect(remotePage.locator('#syncRemoteBadge')).toContainText('Auth');
   await expect(remotePage.locator('#syncRemoteStatusText')).toContainText('credencials remotes');
+
+  await remoteContext.close();
+});
+
+test('resolves a public Supabase storage path from the remote head safely', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio Storage Public',
+    content: 'Bundle des de Supabase Storage public',
+    tags: 'supabase, storage'
+  });
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('provider-storage-public-bundle.json');
+  await exportDownload.saveAs(bundlePath);
+  const bundleBody = require('fs').readFileSync(bundlePath, 'utf8');
+  const bundle = JSON.parse(bundleBody);
+  const latestRevision = bundle.revisions[0];
+
+  let bundleRequestUrl = '';
+  const remoteContext = await browser.newContext();
+  await remoteContext.route('https://storagepublic.supabase.co/rest/v1/sutsumu_workspace_heads*', route => route.fulfill({
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*'
+    },
+    body: JSON.stringify([{
+      provider: 'supabase-rest',
+      local_workspace_id: latestRevision.workspaceId,
+      name: latestRevision.workspaceName,
+      current_revision_id: latestRevision.revisionId,
+      payload_signature: latestRevision.payloadSignature,
+      bundle_storage_path: 'sync-public/workspaces/main-shadow.json',
+      bundle_access: 'public'
+    }])
+  }));
+  await remoteContext.route('https://storagepublic.supabase.co/storage/v1/object/public/sync-public/workspaces/main-shadow.json', route => {
+    bundleRequestUrl = route.request().url();
+    return route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*'
+      },
+      body: bundleBody
+    });
+  });
+
+  const remotePage = await remoteContext.newPage();
+  await gotoApp(remotePage);
+  await remotePage.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await remotePage.locator('#remoteProviderPreset').selectOption('supabase');
+  await remotePage.locator('#remoteProviderPublicKey').fill('public-anon-key');
+  await remotePage.locator('#remoteProviderBaseUrl').fill('https://storagepublic.supabase.co');
+  await remotePage.locator('#remoteProviderWorkspaceId').fill(latestRevision.workspaceId);
+  await remotePage.locator('#remoteShadowUrl').fill('');
+  await remotePage.locator('#connectRemoteShadowUrlBtn').click();
+
+  await expectToast(remotePage, 'URL remota connectada');
+  expect(bundleRequestUrl).toBe('https://storagepublic.supabase.co/storage/v1/object/public/sync-public/workspaces/main-shadow.json');
+
+  await remoteContext.close();
+});
+
+test('resolves an authenticated Supabase storage path and forwards auth headers', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio Storage Auth',
+    content: 'Bundle des de Supabase Storage autenticat',
+    tags: 'supabase, storage, auth'
+  });
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('provider-storage-auth-bundle.json');
+  await exportDownload.saveAs(bundlePath);
+  const bundleBody = require('fs').readFileSync(bundlePath, 'utf8');
+  const bundle = JSON.parse(bundleBody);
+  const latestRevision = bundle.revisions[0];
+
+  let bundleHeaders = null;
+  const remoteContext = await browser.newContext();
+  await remoteContext.route('https://storageauth.supabase.co/rest/v1/sutsumu_workspace_heads*', route => route.fulfill({
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*'
+    },
+    body: JSON.stringify([{
+      provider: 'supabase-rest',
+      local_workspace_id: latestRevision.workspaceId,
+      name: latestRevision.workspaceName,
+      current_revision_id: latestRevision.revisionId,
+      payload_signature: latestRevision.payloadSignature,
+      bundle_storage_path: 'sync-private/workspaces/main-shadow.json',
+      bundle_access: 'authenticated'
+    }])
+  }));
+  await remoteContext.route('https://storageauth.supabase.co/storage/v1/object/authenticated/sync-private/workspaces/main-shadow.json', route => {
+    bundleHeaders = route.request().headers();
+    return route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*'
+      },
+      body: bundleBody
+    });
+  });
+
+  const remotePage = await remoteContext.newPage();
+  await gotoApp(remotePage);
+  await remotePage.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await remotePage.locator('#remoteProviderPreset').selectOption('supabase');
+  await remotePage.locator('#remoteProviderPublicKey').fill('public-anon-key');
+  await remotePage.locator('#remoteProviderSecret').fill('user-session-token');
+  await remotePage.locator('#remoteProviderBaseUrl').fill('https://storageauth.supabase.co');
+  await remotePage.locator('#remoteProviderWorkspaceId').fill(latestRevision.workspaceId);
+  await remotePage.locator('#remoteShadowUrl').fill('');
+  await remotePage.locator('#connectRemoteShadowUrlBtn').click();
+
+  await expectToast(remotePage, 'URL remota connectada');
+  expect(bundleHeaders.apikey).toBe('public-anon-key');
+  expect(bundleHeaders.authorization).toBe('Bearer user-session-token');
 
   await remoteContext.close();
 });

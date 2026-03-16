@@ -54,7 +54,7 @@ I en el preset `Supabase públic` també pot construir la consulta si només rep
 
 La consulta REST es prepara amb:
 
-- `select=provider,local_workspace_id,name,current_revision_id,payload_signature,bundle_url,updated_at`
+- `select=provider,local_workspace_id,name,current_revision_id,payload_signature,bundle_url,bundle_storage_path,bundle_access,updated_at`
 - filtre `local_workspace_id=eq.<id>`
 - `limit=1`
 
@@ -64,6 +64,27 @@ La consulta REST es prepara amb:
 - `200` amb array buit: `Sense head`
 - `401/403`: error d'autenticacio remot
 - `404`: URL o vista no trobada
+
+## Supabase Storage
+
+En lloc de `bundle_url`, el head remot també pot retornar:
+
+- `bundle_storage_path`
+- `bundle_access`
+
+on `bundle_storage_path` és la ruta completa dins de Storage, incloent bucket i camí:
+
+- `sync-public/workspaces/main-shadow.json`
+
+I `bundle_access` pot ser:
+
+- `public`
+- `authenticated`
+
+Sutsumu construeix la URL final cap a:
+
+- `/storage/v1/object/public/...`
+- `/storage/v1/object/authenticated/...`
 
 ## Per Que És Important
 
