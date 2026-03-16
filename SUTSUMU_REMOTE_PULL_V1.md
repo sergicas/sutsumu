@@ -9,6 +9,11 @@ La fase actual de `pull segur` fa això:
 - permet importar un `bundle shadow` remot
 - llegeix el `head` remot
 - el compara amb el `head` local
+- permet aplicar manualment un remot quan:
+  - el remot va per davant
+  - o el dispositiu encara no té cap `head` local equivalent
+- abans d'aplicar-lo, crea una còpia crítica de recuperació
+- no reescriu automàticament ni el `workspace` extern ni el backup extern
 - detecta si:
   - no hi ha remot
   - el remot està disponible
@@ -20,7 +25,7 @@ La fase actual de `pull segur` fa això:
 
 ## Que Encara No Fa
 
-Encara no aplica canvis remots a cegues.
+Encara no aplica canvis remots a cegues ni en tots els casos.
 
 Això és deliberat.
 
@@ -42,6 +47,11 @@ Però encara no són un backend complet amb:
 
 Per tant, fer un `pull` automàtic real ara seria massa arriscat.
 
+En aquesta fase, els adjunts remots encara entren només com a metadades:
+
+- si el dispositiu ja tenia el mateix fitxer binari local, Sutsumu el conserva
+- si no, el document queda marcat sense còpia binària local recuperada
+
 ## Criteri De Seguretat
 
 Sutsumu només hauria d'aplicar remot automàticament quan existeixin alhora:
@@ -56,7 +66,7 @@ Sutsumu només hauria d'aplicar remot automàticament quan existeixin alhora:
 
 El següent sprint hauria de preparar:
 
-- adaptador remot real
-- lectura del `head` remot des d'un backend
-- detecció formal de divergència
-- base per a `pull segur` quan el local sigui net
+- gestió formal de divergència
+- descàrrega segura d'adjunts remots
+- verificació de `checksum`
+- base per a `push` i `pull` guiats sense pèrdua de dades

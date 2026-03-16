@@ -108,6 +108,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const importRemoteShadowBtn = document.getElementById('importRemoteShadowBtn');
   const clearRemoteShadowBtn = document.getElementById('clearRemoteShadowBtn');
   const recheckRemoteShadowBtn = document.getElementById('recheckRemoteShadowBtn');
+  const applyRemoteShadowPullBtn = document.getElementById('applyRemoteShadowPullBtn');
   const remoteShadowFileInput = document.getElementById('remoteShadowFileInput');
   const forceShadowRevisionBtn = document.getElementById('forceShadowRevisionBtn');
   const exportShadowBundleBtn = document.getElementById('exportShadowBundleBtn');
@@ -2066,6 +2067,170 @@ function computeRemoteShadowComparison() {
   };
 }
 
+function getRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison()) {
+  const remoteHead = comparison?.remoteHead || getShadowHistoryHead(remoteShadowSource?.revisions || [], remoteShadowSource?.state?.lastRevisionId || '');
+  const payload = remoteHead?.payload && typeof remoteHead.payload === 'object' ? remoteHead.payload : null;
+  const syncDocs = Array.isArray(payload?.snapshot?.docs) ? payload.snapshot.docs : [];
+  const attachmentCount = syncDocs.filter(item => item?.type === 'document' && item?.attachment).length;
+  if (!remoteHead) {
+    return {
+      canApply: false,
+      status: 'no-remote',
+      message: 'Encara no hi ha cap head remot carregat per aplicar.',
+      remoteHead,
+      payload: null,
+      syncDocs: [],
+      attachmentCount
+    };
+  }
+  if (!payload || payload.schema !== SYNC_PAYLOAD_SCHEMA || !Array.isArray(payload.snapshot?.docs)) {
+    return {
+      canApply: false,
+      status: 'invalid-remote',
+      message: 'El head remot actual no porta un payload sincronitzable compatible.',
+      remoteHead,
+      payload: null,
+      syncDocs: [],
+      attachmentCount
+    };
+  }
+  if (!['remote-ahead', 'remote-only'].includes(comparison?.status)) {
+    const fallbackMessages = {
+      'in-sync': 'El remot i el local ja estan al dia.',
+      'local-ahead': 'El dispositiu local ja va per davant del remot.',
+      'diverged': 'Hi ha divergència entre local i remot. Encara no es pot fer pull manual segur.',
+      'other-workspace': 'Aquest remot pertany a un altre workspace i no es pot aplicar aquí.'
+    };
+    return {
+      canApply: false,
+      status: comparison?.status || 'not-ready',
+      message: fallbackMessages[comparison?.status] || 'Aquest remot encara no es pot aplicar manualment.',
+      remoteHead,
+      payload,
+      syncDocs,
+      attachmentCount
+    };
+  }
+  return {
+    canApply: true,
+    status: comparison.status,
+    message: comparison.status === 'remote-only'
+      ? 'Hi ha un remot disponible i aquest dispositiu encara no té cap head local equivalent.'
+      : 'El remot va per davant i es pot importar manualment amb xarxa de seguretat.',
+    remoteHead,
+    payload,
+    syncDocs,
+    attachmentCount
+  };
+}
+
+function canPreserveLocalAttachmentBlob(remoteItem, localItem) {
+  if (!remoteItem?.attachment || !localItem || localItem.type !== 'document' || !isRealBlob(localItem.fileBlob)) return false;
+  return (remoteItem.attachment.fileName || '') === (localItem.fileName || '')
+    && (remoteItem.attachment.fileType || '') === (localItem.fileType || '')
+    && Number(remoteItem.attachment.fileSize || 0) === Number(localItem.fileSize || 0)
+    && (remoteItem.attachment.sourceFormat || '') === (localItem.sourceFormat || '');
+}
+
+function hydrateDocsFromSyncPayload(syncDocs, currentDocs = docs) {
+  if (!Array.isArray(syncDocs)) return [];
+  const localDocsById = new Map(normalizeDocs(currentDocs).map(item => [item.id, item]));
+  const hydrated = syncDocs
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      if (item.type === 'folder') {
+        return {
+          id: item.id,
+          type: 'folder',
+          title: item.title || 'Carpeta',
+          parentId: item.parentId || 'root',
+          timestamp: item.timestamp || new Date().toISOString(),
+          isDeleted: Boolean(item.isDeleted),
+          desc: typeof item.desc === 'string' ? item.desc : '',
+          color: typeof item.color === 'string' && item.color.trim() ? item.color : '#0ea5e9',
+          tags: normalizeTags(item.tags),
+          isFavorite: Boolean(item.isFavorite),
+          isPinned: Boolean(item.isPinned)
+        };
+      }
+
+      const attachment = item.attachment && typeof item.attachment === 'object' ? item.attachment : null;
+      const localDoc = localDocsById.get(item.id);
+      const preservedBlob = canPreserveLocalAttachmentBlob(item, localDoc) ? localDoc.fileBlob : null;
+      return {
+        id: item.id,
+        type: 'document',
+        title: item.title || 'Document',
+        parentId: item.parentId || 'root',
+        timestamp: item.timestamp || new Date().toISOString(),
+        isDeleted: Boolean(item.isDeleted),
+        category: typeof item.category === 'string' ? item.category : '',
+        tags: normalizeTags(item.tags),
+        content: sanitizeRichText(item.content || ''),
+        versions: normalizeVersions(item.versions || []),
+        fileBlob: preservedBlob,
+        fileType: attachment?.fileType || '',
+        fileName: attachment?.fileName || '',
+        fileSize: Number(attachment?.fileSize || 0),
+        sourceFormat: attachment?.sourceFormat || '',
+        binaryFileUnavailable: Boolean(attachment && !preservedBlob),
+        isFavorite: Boolean(item.isFavorite),
+        isPinned: Boolean(item.isPinned)
+      };
+    });
+  return normalizeDocs(hydrated);
+}
+
+async function applyRemoteShadowPull() {
+  const comparison = computeRemoteShadowComparison();
+  const readiness = getRemoteShadowPullReadiness(comparison);
+  if (!readiness.canApply) {
+    showToast(readiness.message, readiness.status === 'diverged' || readiness.status === 'other-workspace' ? 'error' : 'info');
+    return false;
+  }
+
+  const remoteDate = readiness.remoteHead?.createdAt
+    ? new Date(readiness.remoteHead.createdAt).toLocaleString('ca-ES')
+    : 'fa un moment';
+  const attachmentWarning = readiness.attachmentCount > 0
+    ? ` El remot inclou ${readiness.attachmentCount} adjunts en mode metadades: conservaré els fitxers binaris locals si ja existeixen al dispositiu, però encara no baixaré binaris nous del núvol en aquesta fase.`
+    : '';
+
+  openConfirm(
+    'Aplicar el remot manualment?',
+    `Sutsumu importarà el head remot del ${remoteDate} i substituirà l'estat local visible.${attachmentWarning}`,
+    async () => {
+      const canContinue = await prepareSafetySnapshotOrAbort('before-remote-manual-pull', 'aplicar el remot manualment');
+      if (!canContinue) return;
+      docs = hydrateDocsFromSyncPayload(readiness.syncDocs, docs);
+      expandedFolders = normalizeExpandedFolders(expandedFolders, docs);
+      const remoteWorkspace = readiness.payload?.workspace && typeof readiness.payload.workspace === 'object'
+        ? readiness.payload.workspace
+        : null;
+      workspaceMeta = {
+        id: typeof remoteWorkspace?.id === 'string' && remoteWorkspace.id.trim()
+          ? remoteWorkspace.id.trim()
+          : (workspaceMeta?.id || generateId('workspace')),
+        name: normalizeWorkspaceName(remoteWorkspace?.name || workspaceMeta?.name || 'Sutsumu Workspace'),
+        lastSavedAt: workspaceMeta?.lastSavedAt || '',
+        bindingMode: workspaceHandle ? 'fs' : (workspaceMeta?.bindingMode === 'portable' ? 'portable' : 'local')
+      };
+      workspaceDirty = true;
+      await persistWorkspaceBinding();
+      await saveData('remote-manual-pull');
+      await createShadowRevisionNow('shadow-remote-manual-pull', { silent: true, force: true });
+      renderData();
+      updateRemoteShadowUI();
+      showToast('Remot aplicat localment. Revisa-ho i desa el workspace o el backup extern quan et vagi bé.');
+    },
+    {
+      okLabel: 'Aplicar remot',
+      warningText: "Abans de continuar, Sutsumu crearà una còpia crítica de recuperació. Aquesta fase no farà cap pull automàtic ni sobreescriurà el teu workspace extern sense que el desis tu."
+    }
+  );
+  return true;
+}
+
 function updateRemoteShadowUI(options = {}) {
   const { forceInputs = false } = options;
   if (!syncRemoteStatusTextEl || !syncRemoteBadgeEl) return;
@@ -2100,6 +2265,12 @@ function updateRemoteShadowUI(options = {}) {
   }
   if (remoteShadowUrlInput && (forceInputs || document.activeElement !== remoteShadowUrlInput)) {
     remoteShadowUrlInput.value = remoteShadowDraftUrl || '';
+  }
+  if (applyRemoteShadowPullBtn) {
+    const pullReadiness = getRemoteShadowPullReadiness(comparison);
+    applyRemoteShadowPullBtn.disabled = !pullReadiness.canApply;
+    applyRemoteShadowPullBtn.textContent = comparison.status === 'remote-only' ? 'Importar remot' : 'Aplicar remot';
+    applyRemoteShadowPullBtn.title = pullReadiness.canApply ? '' : pullReadiness.message;
   }
   updateRemoteProviderConnectorUI();
   updateRemoteShadowConnectButtonState();
@@ -6423,7 +6594,9 @@ async function applyPendingAppUpdate() {
       'external-auto-backup': 'Backup extern automàtic',
       'external-manual-backup': 'Backup extern manual',
       'manual-export-zip': 'Exportació ZIP segura',
-      'restore-full-history': "Restauració d'un backup intern"
+      'restore-full-history': "Restauració d'un backup intern",
+      'before-remote-manual-pull': "Abans d'aplicar el remot manualment",
+      'remote-manual-pull': 'Aplicació manual del remot'
     };
     return labels[reason] || `Canvi desat (${reason})`;
   }
@@ -7404,6 +7577,7 @@ async function applyPendingAppUpdate() {
   });
   connectRemoteShadowUrlBtn?.addEventListener('click', () => connectRemoteShadowUrl({ silent: false }));
   importRemoteShadowBtn?.addEventListener('click', promptRemoteShadowImport);
+  applyRemoteShadowPullBtn?.addEventListener('click', applyRemoteShadowPull);
   clearRemoteShadowBtn?.addEventListener('click', clearRemoteShadowSource);
   recheckRemoteShadowBtn?.addEventListener('click', () => {
     if (remoteShadowConfig?.url) {
@@ -7790,8 +7964,10 @@ async function applyPendingAppUpdate() {
     queueSurvivalAttachmentMirrorSync();
     updateTargetSelects();
     queueAutomaticFullBackup(reason);
-    queueExternalBackupAutosave(reason);
-    if (reason !== 'workspace-open') {
+    if (reason !== 'remote-manual-pull') {
+      queueExternalBackupAutosave(reason);
+    }
+    if (reason !== 'workspace-open' && reason !== 'remote-manual-pull') {
       queueWorkspaceAutosave(reason);
     }
     updateBackupStatusUI();

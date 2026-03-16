@@ -170,6 +170,45 @@ test('imports a remote shadow bundle and detects a remote head safely', async ({
   await remoteContext.close();
 });
 
+test('applies a remote shadow bundle manually with a safety pull', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio Pull Manual',
+    content: 'Contingut remot que s ha d aplicar localment',
+    tags: 'remote, pull'
+  });
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('remote-shadow-manual-pull.json');
+  await exportDownload.saveAs(bundlePath);
+
+  const targetContext = await browser.newContext();
+  const targetPage = await targetContext.newPage();
+  await gotoApp(targetPage);
+
+  await targetPage.locator('#remoteShadowFileInput').setInputFiles(bundlePath);
+  await expectToast(targetPage, 'Bundle remot importat');
+  await expect(targetPage.locator('#syncRemoteBadge')).toContainText('Remot disponible');
+  await expect(targetPage.locator('#applyRemoteShadowPullBtn')).toBeEnabled();
+
+  await targetPage.locator('#applyRemoteShadowPullBtn').click();
+  await expect(targetPage.locator('#confirmTitle')).toContainText('Aplicar el remot manualment?');
+  await targetPage.locator('#confirmOkBtn').click();
+
+  await expectToast(targetPage, 'Remot aplicat localment');
+  await expect(targetPage.locator('#list li').filter({ hasText: 'Regressio Pull Manual' })).toHaveCount(1);
+  await expect(targetPage.locator('#syncRemoteBadge')).toContainText('Al dia');
+
+  await targetContext.close();
+});
+
 test('connects a remote shadow URL and compares it safely', async ({ page, browser }, testInfo) => {
   await gotoApp(page);
 
