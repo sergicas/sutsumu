@@ -416,6 +416,82 @@ test('connects a PostgREST-style Supabase head row safely', async ({ page, brows
   await remoteContext.close();
 });
 
+test('builds a Supabase REST head query from project settings safely', async ({ page, browser }, testInfo) => {
+  await gotoApp(page);
+
+  await createDocument(page, {
+    title: 'Regressio Supabase Builder',
+    content: 'Construccio automatica de query head',
+    tags: 'supabase, builder'
+  });
+
+  await page.locator('#forceShadowRevisionBtn').click();
+  await expectToast(page, 'Revisió shadow preparada');
+
+  const exportPromise = page.waitForEvent('download');
+  await page.locator('#exportShadowBundleBtn').click();
+  await expectToast(page, 'Bundle shadow exportat');
+  const exportDownload = await exportPromise;
+  const bundlePath = testInfo.outputPath('provider-supabase-builder-bundle.json');
+  await exportDownload.saveAs(bundlePath);
+  const bundleBody = require('fs').readFileSync(bundlePath, 'utf8');
+  const bundle = JSON.parse(bundleBody);
+  const latestRevision = bundle.revisions[0];
+
+  let capturedUrl = '';
+  let capturedHeaders = null;
+  const remoteContext = await browser.newContext();
+  await remoteContext.route('https://builder.supabase.co/rest/v1/sutsumu_workspace_heads*', route => {
+    capturedUrl = route.request().url();
+    capturedHeaders = route.request().headers();
+    return route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*'
+      },
+      body: JSON.stringify([{
+        provider: 'supabase-rest',
+        local_workspace_id: latestRevision.workspaceId,
+        name: latestRevision.workspaceName,
+        current_revision_id: latestRevision.revisionId,
+        payload_signature: latestRevision.payloadSignature,
+        bundle_url: 'https://builder.supabase.co/storage/v1/object/public/sync/bundle.json'
+      }])
+    });
+  });
+  await remoteContext.route('https://builder.supabase.co/storage/v1/object/public/sync/bundle.json', route => route.fulfill({
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*'
+    },
+    body: bundleBody
+  }));
+
+  const remotePage = await remoteContext.newPage();
+  await gotoApp(remotePage);
+  await remotePage.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await remotePage.locator('#remoteProviderPreset').selectOption('supabase');
+  await remotePage.locator('#remoteProviderPublicKey').fill('public-anon-key');
+  await remotePage.locator('#remoteProviderBaseUrl').fill('https://builder.supabase.co');
+  await remotePage.locator('#remoteProviderWorkspaceId').fill(latestRevision.workspaceId);
+  await remotePage.locator('#remoteShadowUrl').fill('');
+  await remotePage.locator('#connectRemoteShadowUrlBtn').click();
+  await expectToast(remotePage, 'URL remota connectada');
+  await expect(remotePage.locator('#syncRemoteBadge')).toContainText('Remot disponible');
+
+  const builtUrl = new URL(capturedUrl);
+  expect(builtUrl.pathname).toBe('/rest/v1/sutsumu_workspace_heads');
+  expect(builtUrl.searchParams.get('local_workspace_id')).toBe(`eq.${latestRevision.workspaceId}`);
+  expect(builtUrl.searchParams.get('limit')).toBe('1');
+  expect(builtUrl.searchParams.get('select')).toContain('local_workspace_id');
+  expect(capturedHeaders.apikey).toBe('public-anon-key');
+  expect(capturedHeaders.authorization).toBe('Bearer public-anon-key');
+
+  await remoteContext.close();
+});
+
 test('writes an automatic external backup and keeps the last good copy if the app becomes empty', async ({ page }) => {
   await installExternalBackupStub(page);
   await gotoApp(page);

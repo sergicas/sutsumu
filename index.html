@@ -415,6 +415,18 @@
                           <span>Anon key pública</span>
                           <input id="remoteProviderPublicKey" type="password" placeholder="eyJ..." autocomplete="off" />
                         </label>
+                        <label id="remoteProviderBaseUrlWrap" class="sync-remote-field sync-remote-field-wide hidden">
+                          <span>URL projecte o REST</span>
+                          <input id="remoteProviderBaseUrl" type="url" placeholder="https://project.supabase.co o .../rest/v1" autocomplete="off" />
+                        </label>
+                        <label id="remoteProviderHeadTableWrap" class="sync-remote-field hidden">
+                          <span>Taula o vista head</span>
+                          <input id="remoteProviderHeadTable" type="text" placeholder="sutsumu_workspace_heads" autocomplete="off" />
+                        </label>
+                        <label id="remoteProviderWorkspaceIdWrap" class="sync-remote-field hidden">
+                          <span>Local workspace id</span>
+                          <input id="remoteProviderWorkspaceId" type="text" placeholder="workspace principal" autocomplete="off" />
+                        </label>
                         <label id="remoteProviderSecretWrap" class="sync-remote-field sync-remote-field-wide hidden">
                           <span id="remoteProviderSecretLabel">Token</span>
                           <input id="remoteProviderSecret" type="password" placeholder="Introdueix el token local del backend" autocomplete="off" />

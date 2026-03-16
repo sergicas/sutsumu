@@ -40,10 +40,23 @@ Sutsumu llegeix primer aquest `head` i després resol el `bundleUrl`.
 En una resposta tipus `Supabase/PostgREST`, això vol dir que també pot entendre camps com:
 
 - `workspace_id`
+- `local_workspace_id`
 - `name`
 - `current_revision_id`
 - `payload_signature`
 - `bundle_url`
+
+I en el preset `Supabase públic` també pot construir la consulta si només reps:
+
+- URL del projecte o de `rest/v1`
+- taula/vista del head
+- `local workspace id`
+
+La consulta REST es prepara amb:
+
+- `select=provider,local_workspace_id,name,current_revision_id,payload_signature,bundle_url,updated_at`
+- filtre `local_workspace_id=eq.<id>`
+- `limit=1`
 
 ## Per Que És Important
 

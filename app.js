@@ -87,6 +87,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const remoteProviderHeaderNameInput = document.getElementById('remoteProviderHeaderName');
   const remoteProviderPublicKeyWrapEl = document.getElementById('remoteProviderPublicKeyWrap');
   const remoteProviderPublicKeyInput = document.getElementById('remoteProviderPublicKey');
+  const remoteProviderBaseUrlWrapEl = document.getElementById('remoteProviderBaseUrlWrap');
+  const remoteProviderBaseUrlInput = document.getElementById('remoteProviderBaseUrl');
+  const remoteProviderHeadTableWrapEl = document.getElementById('remoteProviderHeadTableWrap');
+  const remoteProviderHeadTableInput = document.getElementById('remoteProviderHeadTable');
+  const remoteProviderWorkspaceIdWrapEl = document.getElementById('remoteProviderWorkspaceIdWrap');
+  const remoteProviderWorkspaceIdInput = document.getElementById('remoteProviderWorkspaceId');
   const remoteProviderSecretWrapEl = document.getElementById('remoteProviderSecretWrap');
   const remoteProviderSecretLabelEl = document.getElementById('remoteProviderSecretLabel');
   const remoteProviderSecretInput = document.getElementById('remoteProviderSecret');
@@ -1165,22 +1171,33 @@ function writeRemoteShadowSourceSnapshot(source) {
 function normalizeRemoteProviderProfile(rawProfile) {
   if (!rawProfile || typeof rawProfile !== 'object') {
     return {
-      preset: 'none',
-      headerName: 'x-api-key',
-      publicKey: '',
-      rememberSecret: false,
-      lastValidatedAt: ''
-    };
+    preset: 'none',
+    headerName: 'x-api-key',
+    publicKey: '',
+    baseUrl: '',
+    headTable: 'sutsumu_workspace_heads',
+    workspaceId: '',
+    rememberSecret: false,
+    lastValidatedAt: ''
+  };
   }
   const preset = ['none', 'bearer', 'header', 'supabase'].includes(rawProfile.preset) ? rawProfile.preset : 'none';
   const headerName = typeof rawProfile.headerName === 'string' && rawProfile.headerName.trim()
     ? rawProfile.headerName.trim()
     : 'x-api-key';
   const publicKey = typeof rawProfile.publicKey === 'string' ? rawProfile.publicKey.trim() : '';
+  const baseUrl = typeof rawProfile.baseUrl === 'string' ? rawProfile.baseUrl.trim() : '';
+  const headTable = typeof rawProfile.headTable === 'string' && rawProfile.headTable.trim()
+    ? rawProfile.headTable.trim()
+    : 'sutsumu_workspace_heads';
+  const workspaceId = typeof rawProfile.workspaceId === 'string' ? rawProfile.workspaceId.trim() : '';
   return {
     preset,
     headerName,
     publicKey,
+    baseUrl,
+    headTable,
+    workspaceId,
     rememberSecret: rawProfile.rememberSecret === true,
     lastValidatedAt: typeof rawProfile.lastValidatedAt === 'string' ? rawProfile.lastValidatedAt : ''
   };
@@ -1239,6 +1256,9 @@ function getDraftRemoteProviderProfile() {
     preset: getSelectedRemoteProviderPreset(),
     headerName: remoteProviderHeaderNameInput?.value || remoteProviderProfile?.headerName || 'x-api-key',
     publicKey: remoteProviderPublicKeyInput?.value || remoteProviderProfile?.publicKey || '',
+    baseUrl: remoteProviderBaseUrlInput?.value || remoteProviderProfile?.baseUrl || '',
+    headTable: remoteProviderHeadTableInput?.value || remoteProviderProfile?.headTable || 'sutsumu_workspace_heads',
+    workspaceId: remoteProviderWorkspaceIdInput?.value || remoteProviderProfile?.workspaceId || '',
     rememberSecret: remoteProviderRememberSecretInput?.checked ?? remoteProviderProfile?.rememberSecret ?? false,
     lastValidatedAt: remoteProviderProfile?.lastValidatedAt || ''
   });
@@ -1265,6 +1285,36 @@ function getRemoteProviderValidationError(profile = getDraftRemoteProviderProfil
   return '';
 }
 
+function canBuildSupabaseHeadUrl(profile = getDraftRemoteProviderProfile()) {
+  const normalized = normalizeRemoteProviderProfile(profile);
+  return normalized.preset === 'supabase' && Boolean(normalized.baseUrl && normalized.workspaceId);
+}
+
+function normalizeSupabaseRestBaseUrl(baseUrl) {
+  const trimmed = String(baseUrl || '').trim();
+  if (!trimmed) throw new Error('Falta la URL base de Supabase.');
+  const parsed = new URL(trimmed, window.location.href);
+  const cleanPath = parsed.pathname.replace(/\/+$/, '');
+  parsed.pathname = cleanPath.endsWith('/rest/v1') ? cleanPath : `${cleanPath}/rest/v1`;
+  parsed.search = '';
+  parsed.hash = '';
+  return parsed;
+}
+
+function buildSupabaseHeadUrl(profile = getDraftRemoteProviderProfile()) {
+  const normalized = normalizeRemoteProviderProfile(profile);
+  if (!canBuildSupabaseHeadUrl(normalized)) {
+    throw new Error('Per construir la URL de Supabase cal la URL base i el local workspace id.');
+  }
+  const baseUrl = normalizeSupabaseRestBaseUrl(normalized.baseUrl);
+  const safeTable = encodeURIComponent((normalized.headTable || 'sutsumu_workspace_heads').replace(/^\/+/, ''));
+  baseUrl.pathname = `${baseUrl.pathname.replace(/\/+$/, '')}/${safeTable}`;
+  baseUrl.searchParams.set('select', 'provider,local_workspace_id,name,current_revision_id,payload_signature,bundle_url,updated_at');
+  baseUrl.searchParams.set('local_workspace_id', `eq.${normalized.workspaceId}`);
+  baseUrl.searchParams.set('limit', '1');
+  return baseUrl.toString();
+}
+
 function buildRemoteProviderAuthHeaders(profile = remoteProviderProfile, secret = remoteProviderSecret) {
   const normalized = normalizeRemoteProviderProfile(profile);
   const trimmedSecret = typeof secret === 'string' ? secret.trim() : '';
@@ -1286,8 +1336,14 @@ function buildRemoteProviderAuthHeaders(profile = remoteProviderProfile, secret 
 
 function updateRemoteShadowConnectButtonState() {
   if (!connectRemoteShadowUrlBtn) return;
+  const draftProfile = getDraftRemoteProviderProfile();
   const rawUrl = String(remoteShadowUrlInput?.value || remoteShadowConfig?.url || '').trim();
   if (!rawUrl) {
+    if (getSelectedRemoteShadowMode() === 'provider-head-url' && canBuildSupabaseHeadUrl(draftProfile)) {
+      const validationError = getRemoteProviderValidationError(draftProfile);
+      connectRemoteShadowUrlBtn.disabled = Boolean(validationError);
+      return;
+    }
     connectRemoteShadowUrlBtn.disabled = true;
     return;
   }
@@ -1295,7 +1351,7 @@ function updateRemoteShadowConnectButtonState() {
     connectRemoteShadowUrlBtn.disabled = false;
     return;
   }
-  const validationError = getRemoteProviderValidationError();
+  const validationError = getRemoteProviderValidationError(draftProfile);
   connectRemoteShadowUrlBtn.disabled = Boolean(validationError);
 }
 
@@ -1340,6 +1396,15 @@ function updateRemoteProviderModeUI() {
   if (remoteProviderPublicKeyInput && document.activeElement !== remoteProviderPublicKeyInput) {
     remoteProviderPublicKeyInput.value = profile.publicKey || '';
   }
+  if (remoteProviderBaseUrlInput && document.activeElement !== remoteProviderBaseUrlInput) {
+    remoteProviderBaseUrlInput.value = profile.baseUrl || '';
+  }
+  if (remoteProviderHeadTableInput && document.activeElement !== remoteProviderHeadTableInput) {
+    remoteProviderHeadTableInput.value = profile.headTable || 'sutsumu_workspace_heads';
+  }
+  if (remoteProviderWorkspaceIdInput && document.activeElement !== remoteProviderWorkspaceIdInput) {
+    remoteProviderWorkspaceIdInput.value = profile.workspaceId || syncPrepState?.workspace?.id || '';
+  }
   if (remoteProviderSecretInput && document.activeElement !== remoteProviderSecretInput) {
     remoteProviderSecretInput.value = remoteProviderSecret || '';
   }
@@ -1348,9 +1413,13 @@ function updateRemoteProviderModeUI() {
   }
   const showHeaderName = effectivePreset === 'header';
   const showPublicKey = effectivePreset === 'supabase';
+  const showSupabaseBuilder = effectivePreset === 'supabase';
   const showSecret = effectivePreset === 'bearer' || effectivePreset === 'header' || effectivePreset === 'supabase';
   remoteProviderHeaderNameWrapEl?.classList.toggle('hidden', !showHeaderName);
   remoteProviderPublicKeyWrapEl?.classList.toggle('hidden', !showPublicKey);
+  remoteProviderBaseUrlWrapEl?.classList.toggle('hidden', !showSupabaseBuilder);
+  remoteProviderHeadTableWrapEl?.classList.toggle('hidden', !showSupabaseBuilder);
+  remoteProviderWorkspaceIdWrapEl?.classList.toggle('hidden', !showSupabaseBuilder);
   remoteProviderSecretWrapEl?.classList.toggle('hidden', !showSecret);
   remoteProviderRememberWrapEl?.classList.toggle('hidden', !showSecret);
   if (remoteProviderSecretLabelEl) {
@@ -1365,7 +1434,7 @@ function updateRemoteProviderModeUI() {
   }
   if (remoteProviderProfileHintEl) {
     if (effectivePreset === 'supabase') {
-      remoteProviderProfileHintEl.textContent = "Mode preparat per Supabase: enviarà apikey i Authorization i també acceptarà una fila PostgREST o un descriptor head remot sense fer encara cap pull o push.";
+      remoteProviderProfileHintEl.textContent = "Mode preparat per Supabase: pots enganxar una URL de head completa o només la URL del projecte i el local workspace id. Sutsumu construirà la consulta REST segura i acceptarà una fila PostgREST o un descriptor head remot sense fer encara cap pull o push.";
     } else if (effectivePreset === 'header') {
       remoteProviderProfileHintEl.textContent = 'Mode capçalera API: el nom i valor de la capçalera només es fan servir en aquest dispositiu.';
     } else if (effectivePreset === 'bearer') {
@@ -1475,16 +1544,19 @@ async function fetchRemoteShadowBundleFromProviderHead(url, providerProfile = re
 
 async function connectRemoteShadowUrl(options = {}) {
   const { silent = false } = options;
-  const rawUrl = String(remoteShadowUrlInput?.value || remoteShadowConfig?.url || '').trim();
   const mode = getSelectedRemoteShadowMode();
   const draftProviderProfile = mode === 'provider-head-url' ? getDraftRemoteProviderProfile() : null;
   const draftProviderSecret = mode === 'provider-head-url' ? getDraftRemoteProviderSecret() : '';
-  if (!rawUrl) {
+  const rawUrl = String(remoteShadowUrlInput?.value || remoteShadowConfig?.url || '').trim();
+  const effectiveUrl = mode === 'provider-head-url' && draftProviderProfile?.preset === 'supabase' && !rawUrl && canBuildSupabaseHeadUrl(draftProviderProfile)
+    ? buildSupabaseHeadUrl(draftProviderProfile)
+    : rawUrl;
+  if (!effectiveUrl) {
     showToast(mode === 'provider-head-url' ? 'Introdueix una URL de head remot.' : 'Introdueix una URL de bundle remot.', 'error');
     return false;
   }
 
-  if (!/^https?:\/\//i.test(rawUrl) && !rawUrl.startsWith('/')) {
+  if (!/^https?:\/\//i.test(effectiveUrl) && !effectiveUrl.startsWith('/')) {
     showToast('La URL remota ha de començar per https://, http:// o /.', 'error');
     return false;
   }
@@ -1499,7 +1571,7 @@ async function connectRemoteShadowUrl(options = {}) {
 
   writeRemoteShadowConfigSnapshot({
     mode,
-    url: rawUrl,
+    url: effectiveUrl,
     lastStatus: 'checking',
     lastFetchedAt: remoteShadowConfig?.lastFetchedAt || '',
     lastError: '',
@@ -1507,11 +1579,11 @@ async function connectRemoteShadowUrl(options = {}) {
   });
   try {
     let parsed;
-    let sourceName = rawUrl;
+    let sourceName = effectiveUrl;
     if (mode === 'provider-head-url') {
       const providerProfile = writeRemoteProviderProfileSnapshot(draftProviderProfile);
       const providerSecret = persistRemoteProviderSecret(draftProviderSecret, providerProfile.rememberSecret);
-      const providerResult = await fetchRemoteShadowBundleFromProviderHead(rawUrl, providerProfile, providerSecret);
+      const providerResult = await fetchRemoteShadowBundleFromProviderHead(effectiveUrl, providerProfile, providerSecret);
       parsed = providerResult.bundle;
       sourceName = providerResult.descriptor.bundleUrl;
       writeRemoteProviderProfileSnapshot({
@@ -1528,7 +1600,7 @@ async function connectRemoteShadowUrl(options = {}) {
     });
     writeRemoteShadowConfigSnapshot({
       mode,
-      url: rawUrl,
+      url: effectiveUrl,
       lastStatus: 'connected',
       lastFetchedAt: new Date().toISOString(),
       lastError: '',
@@ -1536,7 +1608,7 @@ async function connectRemoteShadowUrl(options = {}) {
     });
     const comparison = computeRemoteShadowComparison();
     if (!silent) {
-      showToast(`URL remota connectada: ${normalized?.sourceName || rawUrl}`);
+      showToast(`URL remota connectada: ${normalized?.sourceName || effectiveUrl}`);
       if (comparison.status === 'remote-ahead') {
         showToast('El remot va per davant. Encara no faré pull automàtic en aquesta fase.', 'info');
       }
@@ -1546,7 +1618,7 @@ async function connectRemoteShadowUrl(options = {}) {
     console.warn("No s'ha pogut connectar la URL remota de shadow sync.", err);
     writeRemoteShadowConfigSnapshot({
       mode,
-      url: rawUrl,
+      url: effectiveUrl,
       lastStatus: 'error',
       lastFetchedAt: remoteShadowConfig?.lastFetchedAt || '',
       lastError: err?.message || 'remote-fetch-error',
@@ -6890,6 +6962,15 @@ async function applyPendingAppUpdate() {
     updateRemoteShadowConnectButtonState();
   });
   remoteProviderPublicKeyInput?.addEventListener('input', () => {
+    updateRemoteShadowConnectButtonState();
+  });
+  remoteProviderBaseUrlInput?.addEventListener('input', () => {
+    updateRemoteShadowConnectButtonState();
+  });
+  remoteProviderHeadTableInput?.addEventListener('input', () => {
+    updateRemoteShadowConnectButtonState();
+  });
+  remoteProviderWorkspaceIdInput?.addEventListener('input', () => {
     updateRemoteShadowConnectButtonState();
   });
   remoteProviderSecretInput?.addEventListener('input', () => {
