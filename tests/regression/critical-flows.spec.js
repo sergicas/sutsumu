@@ -492,6 +492,66 @@ test('builds a Supabase REST head query from project settings safely', async ({ 
   await remoteContext.close();
 });
 
+test('shows a clear empty-head state when the backend returns no workspace row', async ({ page, browser }) => {
+  await gotoApp(page);
+
+  const remoteContext = await browser.newContext();
+  await remoteContext.route('https://empty.supabase.co/rest/v1/sutsumu_workspace_heads*', route => route.fulfill({
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*'
+    },
+    body: '[]'
+  }));
+
+  const remotePage = await remoteContext.newPage();
+  await gotoApp(remotePage);
+  await remotePage.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await remotePage.locator('#remoteProviderPreset').selectOption('supabase');
+  await remotePage.locator('#remoteProviderPublicKey').fill('public-anon-key');
+  await remotePage.locator('#remoteProviderBaseUrl').fill('https://empty.supabase.co');
+  await remotePage.locator('#remoteProviderWorkspaceId').fill('workspace-inexistent');
+  await remotePage.locator('#remoteShadowUrl').fill('');
+  await remotePage.locator('#connectRemoteShadowUrlBtn').click();
+
+  await expectToast(remotePage, 'No hi ha cap head remot per a aquest workspace.');
+  await expect(remotePage.locator('#syncRemoteBadge')).toContainText('Sense head');
+  await expect(remotePage.locator('#syncRemoteStatusText')).toContainText('No hi ha cap head remot');
+
+  await remoteContext.close();
+});
+
+test('shows a clear auth state when the backend rejects the remote credentials', async ({ page, browser }) => {
+  await gotoApp(page);
+
+  const remoteContext = await browser.newContext();
+  await remoteContext.route('https://auth.supabase.co/rest/v1/sutsumu_workspace_heads*', route => route.fulfill({
+    status: 401,
+    headers: {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*'
+    },
+    body: JSON.stringify({ message: 'Unauthorized' })
+  }));
+
+  const remotePage = await remoteContext.newPage();
+  await gotoApp(remotePage);
+  await remotePage.locator('#remoteShadowMode').selectOption('provider-head-url');
+  await remotePage.locator('#remoteProviderPreset').selectOption('supabase');
+  await remotePage.locator('#remoteProviderPublicKey').fill('public-anon-key');
+  await remotePage.locator('#remoteProviderBaseUrl').fill('https://auth.supabase.co');
+  await remotePage.locator('#remoteProviderWorkspaceId').fill('workspace-auth');
+  await remotePage.locator('#remoteShadowUrl').fill('');
+  await remotePage.locator('#connectRemoteShadowUrlBtn').click();
+
+  await expectToast(remotePage, 'Les credencials remotes no tenen accés al head (401).');
+  await expect(remotePage.locator('#syncRemoteBadge')).toContainText('Auth');
+  await expect(remotePage.locator('#syncRemoteStatusText')).toContainText('credencials remotes');
+
+  await remoteContext.close();
+});
+
 test('writes an automatic external backup and keeps the last good copy if the app becomes empty', async ({ page }) => {
   await installExternalBackupStub(page);
   await gotoApp(page);

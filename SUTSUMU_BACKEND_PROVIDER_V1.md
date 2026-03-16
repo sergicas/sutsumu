@@ -58,6 +58,13 @@ La consulta REST es prepara amb:
 - filtre `local_workspace_id=eq.<id>`
 - `limit=1`
 
+## Respostes Reals Que Ara Queden Cobertes
+
+- `200` amb fila valida: connexio correcta
+- `200` amb array buit: `Sense head`
+- `401/403`: error d'autenticacio remot
+- `404`: URL o vista no trobada
+
 ## Per Que És Important
 
 Això ja s'assembla molt més a un backend real.

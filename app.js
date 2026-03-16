@@ -1473,7 +1473,19 @@ function readRemoteProviderHeadField(candidate, keys = []) {
   return '';
 }
 
+function createRemoteShadowConnectionError(message, remoteStatus = 'error') {
+  const err = new Error(message);
+  err.remoteStatus = remoteStatus;
+  return err;
+}
+
 function normalizeRemoteProviderHead(rawHead, sourceUrl = '') {
+  if (Array.isArray(rawHead) && rawHead.length === 0) {
+    throw createRemoteShadowConnectionError('No hi ha cap head remot per a aquest workspace.', 'empty');
+  }
+  if (rawHead && typeof rawHead === 'object' && Array.isArray(rawHead.data) && rawHead.data.length === 0) {
+    throw createRemoteShadowConnectionError('No hi ha cap head remot per a aquest workspace.', 'empty');
+  }
   const candidate = unwrapRemoteProviderHeadCandidate(rawHead);
   if (!candidate || typeof candidate !== 'object') {
     throw new Error('La URL remota no retorna un head provider compatible.');
@@ -1525,7 +1537,13 @@ async function fetchRemoteShadowBundleFromProviderHead(url, providerProfile = re
     }
   });
   if (!response.ok) {
-    throw new Error(`No s'ha pogut llegir el head remot (${response.status}).`);
+    if (response.status === 401 || response.status === 403) {
+      throw createRemoteShadowConnectionError(`Les credencials remotes no tenen accés al head (${response.status}).`, 'auth-error');
+    }
+    if (response.status === 404) {
+      throw createRemoteShadowConnectionError('La URL o vista remota no existeix (404).', 'not-found');
+    }
+    throw createRemoteShadowConnectionError(`No s'ha pogut llegir el head remot (${response.status}).`, 'error');
   }
   const parsedHead = normalizeRemoteProviderHead(await response.json(), url);
   const cachedHead = getShadowHistoryHead(remoteShadowSource?.revisions || [], remoteShadowSource?.state?.lastRevisionId || '');
@@ -1619,7 +1637,7 @@ async function connectRemoteShadowUrl(options = {}) {
     writeRemoteShadowConfigSnapshot({
       mode,
       url: effectiveUrl,
-      lastStatus: 'error',
+      lastStatus: err?.remoteStatus || 'error',
       lastFetchedAt: remoteShadowConfig?.lastFetchedAt || '',
       lastError: err?.message || 'remote-fetch-error',
       autoCheckOnStart: true
@@ -1734,16 +1752,28 @@ function updateRemoteShadowUI() {
   const comparison = computeRemoteShadowComparison();
   const remoteHead = comparison.remoteHead;
   let description = comparison.description;
-  if (remoteShadowConfig?.lastStatus === 'error' && remoteShadowConfig.lastError) {
-    description = `${comparison.description} Últim error remot: ${remoteShadowConfig.lastError}`;
-  } else if (remoteShadowConfig?.lastStatus === 'checking') {
+  let badgeLabel = comparison.label;
+  if (remoteShadowConfig?.lastStatus === 'checking') {
+    badgeLabel = 'Comprovant';
     description = 'Comprovant la URL remota configurada...';
+  } else if (remoteShadowConfig?.lastStatus === 'auth-error') {
+    badgeLabel = 'Auth';
+    description = remoteShadowConfig.lastError || 'Les credencials remotes actuals no tenen accés al head.';
+  } else if (remoteShadowConfig?.lastStatus === 'empty') {
+    badgeLabel = 'Sense head';
+    description = remoteShadowConfig.lastError || 'No hi ha cap head remot disponible per a aquest workspace.';
+  } else if (remoteShadowConfig?.lastStatus === 'not-found') {
+    badgeLabel = '404 remot';
+    description = remoteShadowConfig.lastError || 'La URL remota no existeix o la vista encara no està publicada.';
+  } else if (remoteShadowConfig?.lastStatus === 'error' && remoteShadowConfig.lastError) {
+    badgeLabel = remoteHead ? comparison.label : 'Error remot';
+    description = remoteShadowConfig.lastError;
   }
-  syncRemoteBadgeEl.textContent = comparison.label;
+  syncRemoteBadgeEl.textContent = badgeLabel;
   syncRemoteStatusTextEl.textContent = description;
   if (syncRemoteSourceValueEl) syncRemoteSourceValueEl.textContent = getRemoteShadowSourceLabel();
   if (syncRemoteHeadValueEl) syncRemoteHeadValueEl.textContent = remoteHead ? createShadowSyncShortId(remoteHead.revisionId) : 'pendent';
-  if (syncRemoteCompareValueEl) syncRemoteCompareValueEl.textContent = comparison.label;
+  if (syncRemoteCompareValueEl) syncRemoteCompareValueEl.textContent = badgeLabel;
   if (syncRemoteImportedValueEl) {
     syncRemoteImportedValueEl.textContent = formatShadowSyncMoment(remoteShadowConfig?.lastFetchedAt || remoteShadowSource?.importedAt || '');
   }
