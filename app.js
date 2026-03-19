@@ -2007,7 +2007,10 @@ function saveRemoteProviderConnector() {
     delete nextSecrets[connectorId];
     writeRemoteProviderConnectorSecretsSnapshot(nextSecrets);
   }
-  updateRemoteShadowUI();
+  writeRemoteProviderProfileSnapshot(profile);
+  persistRemoteProviderSecret(secret, profile.rememberSecret);
+  remoteShadowDraftUrl = connector.url || '';
+  updateRemoteShadowUI({ forceInputs: true });
   showToast(existing ? `Connector remot actualitzat: ${connectorLabel}` : `Connector remot desat: ${connectorLabel}`);
 }
 
