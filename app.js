@@ -77,6 +77,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   const syncRemoteSourceValueEl = document.getElementById('syncRemoteSourceValue');
   const syncRemoteHeadValueEl = document.getElementById('syncRemoteHeadValue');
   const syncRemoteCompareValueEl = document.getElementById('syncRemoteCompareValue');
+  const syncRemotePullPreviewValueEl = document.getElementById('syncRemotePullPreviewValue');
+  const syncRemotePullPreviewPanelEl = document.getElementById('syncRemotePullPreviewPanel');
+  const syncRemotePullPreviewTextEl = document.getElementById('syncRemotePullPreviewText');
+  const syncRemotePullPreviewListEl = document.getElementById('syncRemotePullPreviewList');
+  const syncRemotePushPreviewValueEl = document.getElementById('syncRemotePushPreviewValue');
+  const syncRemotePushPreviewPanelEl = document.getElementById('syncRemotePushPreviewPanel');
+  const syncRemotePushPreviewTextEl = document.getElementById('syncRemotePushPreviewText');
+  const syncRemotePushPreviewListEl = document.getElementById('syncRemotePushPreviewList');
+  const syncRemoteHistoryValueEl = document.getElementById('syncRemoteHistoryValue');
+  const syncRemoteHistoryPanelEl = document.getElementById('syncRemoteHistoryPanel');
+  const syncRemoteHistoryTextEl = document.getElementById('syncRemoteHistoryText');
+  const syncRemoteHistoryFiltersEl = document.getElementById('syncRemoteHistoryFilters');
+  const syncRemoteHistoryListEl = document.getElementById('syncRemoteHistoryList');
+  const syncRemoteHistoryDetailEl = document.getElementById('syncRemoteHistoryDetail');
+  const syncRemoteAutomationTextEl = document.getElementById('syncRemoteAutomationText');
+  const remoteAutoCheckOnStartInput = document.getElementById('remoteAutoCheckOnStart');
+  const remoteAutoPullWhenCleanInput = document.getElementById('remoteAutoPullWhenClean');
+  const remoteAutoPushWhenStableInput = document.getElementById('remoteAutoPushWhenStable');
+  const syncRemoteConflictPanelEl = document.getElementById('syncRemoteConflictPanel');
+  const syncRemoteConflictTextEl = document.getElementById('syncRemoteConflictText');
+  const syncRemoteConflictListEl = document.getElementById('syncRemoteConflictList');
   const syncRemoteImportedValueEl = document.getElementById('syncRemoteImportedValue');
   const remoteShadowModeSelectEl = document.getElementById('remoteShadowMode');
   const remoteShadowUrlInput = document.getElementById('remoteShadowUrl');
@@ -293,8 +314,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const SHADOW_SYNC_HISTORY_KEY = 'sutsumu_shadow_sync_history_v1';
   const SHADOW_SYNC_HISTORY_LIMIT = 18;
   const SHADOW_SYNC_DEBOUNCE_MS = 1800;
+  const REMOTE_AUTO_SYNC_DEBOUNCE_MS = 1400;
+  const AUTO_REMOTE_PUSH_INLINE_ATTACHMENT_MAX_BYTES = 1024 * 1024;
+  const AUTO_REMOTE_PUSH_TOTAL_INLINE_BYTES = 4 * 1024 * 1024;
   const REMOTE_SHADOW_SOURCE_KEY = 'sutsumu_remote_shadow_source_v1';
   const REMOTE_SHADOW_CONFIG_KEY = 'sutsumu_remote_shadow_config_v1';
+  const REMOTE_REVISION_DOWNLOADS_KEY = 'sutsumu_remote_revision_downloads_v1';
+  const REMOTE_REVISION_APPLICATIONS_KEY = 'sutsumu_remote_revision_applications_v1';
   const REMOTE_PROVIDER_PROFILE_KEY = 'sutsumu_remote_provider_profile_v1';
   const REMOTE_PROVIDER_SECRET_KEY = 'sutsumu_remote_provider_secret_v1';
   const REMOTE_PROVIDER_SECRET_SESSION_KEY = 'sutsumu_remote_provider_secret_session_v1';
@@ -375,13 +401,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   let shadowSyncState = null;
   let shadowSyncHistory = [];
   let shadowSyncTimer = null;
+  let remoteAutoSyncTimer = null;
   let remoteShadowSource = null;
   let remoteShadowConfig = null;
+  let remoteShadowAutomationDraft = {
+    autoCheckOnStart: true,
+    autoPullWhenClean: false,
+    autoPushWhenStable: false
+  };
+  let remoteRevisionDownloads = {};
+  let remoteRevisionApplications = {};
   let remoteShadowDraftUrl = '';
   let remoteProviderProfile = null;
   let remoteProviderSecret = '';
   let remoteProviderConnectors = [];
   let remoteProviderConnectorSecrets = {};
+  let selectedRemoteHistoryRevisionId = '';
+  let activeRemoteHistoryFilter = 'all';
+  let remoteAutoSyncInFlight = false;
+  let lastRemoteAutoSyncKey = '';
   let activeRemoteProviderConnectorId = '';
   let workspaceAutosaveTimer = null;
   let isWorkspaceSaving = false;
@@ -777,6 +815,22 @@ function createSyncPayloadSignature(payload) {
   return createFastStateHash(signatureBase);
 }
 
+function stableShadowSyncStringify(value) {
+  const normalizeValue = input => {
+    if (Array.isArray(input)) {
+      return input.map(normalizeValue);
+    }
+    if (input && typeof input === 'object') {
+      return Object.keys(input).sort().reduce((acc, key) => {
+        acc[key] = normalizeValue(input[key]);
+        return acc;
+      }, {});
+    }
+    return input;
+  };
+  return JSON.stringify(normalizeValue(value));
+}
+
 function renderSyncPreparationChipList(container, items, variant = 'sync') {
   if (!container) return;
   container.innerHTML = '';
@@ -1043,12 +1097,14 @@ async function createShadowRevisionNow(reason = 'shadow-manual', options = {}) {
       lastError: ''
     });
     if (!silent) showToast('La darrera revisió shadow ja reflecteix aquest estat.', 'info');
+    queueRemoteShadowAutomation('shadow-ready', { immediate: true });
     return shadowSyncHistory[0] || null;
   }
 
   const entry = createShadowSyncEntryFromPayload(payload, reason);
   await persistShadowSyncEntry(entry);
   if (!silent) showToast(`Revisió shadow preparada: ${createShadowSyncShortId(entry.revisionId)}`);
+  queueRemoteShadowAutomation('shadow-ready', { immediate: true });
   return entry;
 }
 
@@ -1081,6 +1137,36 @@ function createShadowSyncBundle() {
     appRelease: APP_RELEASE_LABEL,
     state: normalizeShadowSyncState(shadowSyncState),
     revisions: normalizeShadowSyncHistory(shadowSyncHistory)
+  };
+}
+
+function createStandaloneShadowSyncBundle(revisions = [], options = {}) {
+  const normalizedRevisions = normalizeShadowSyncHistory(revisions);
+  const headEntry = getShadowHistoryHead(normalizedRevisions, options.lastRevisionId || normalizedRevisions[0]?.revisionId || '');
+  const exportedAt = typeof options.exportedAt === 'string' && !Number.isNaN(Date.parse(options.exportedAt))
+    ? options.exportedAt
+    : new Date().toISOString();
+  return {
+    schema: SHADOW_SYNC_BUNDLE_SCHEMA,
+    version: 1,
+    exportedAt,
+    app: 'Sutsumu',
+    appVersion: APP_VERSION,
+    appRelease: APP_RELEASE_LABEL,
+    state: normalizeShadowSyncState({
+      enabled: true,
+      status: normalizedRevisions.length ? 'ready' : 'idle',
+      lastRevisionId: headEntry?.revisionId || '',
+      lastBaseRevisionId: headEntry?.baseRevisionId || '',
+      lastPayloadSignature: headEntry?.payloadSignature || '',
+      lastQueuedAt: headEntry?.createdAt || exportedAt,
+      lastExportedAt: exportedAt,
+      lastReason: typeof options.lastReason === 'string' && options.lastReason.trim() ? options.lastReason.trim() : 'shadow-standalone-export',
+      lastRemoteStatus: typeof options.lastRemoteStatus === 'string' && options.lastRemoteStatus.trim() ? options.lastRemoteStatus.trim() : 'exported',
+      lastError: '',
+      historyCount: normalizedRevisions.length
+    }),
+    revisions: normalizedRevisions
   };
 }
 
@@ -1147,6 +1233,28 @@ function normalizeRemoteShadowSource(rawSource) {
   if (!rawSource || typeof rawSource !== 'object') return null;
   const revisions = normalizeShadowSyncHistory(rawSource.revisions);
   const state = normalizeShadowSyncState(rawSource.state);
+  const rawRecentRevisions = Array.isArray(rawSource.recentRevisions)
+    ? rawSource.recentRevisions
+    : (Array.isArray(rawSource.remoteHead?.recentRevisions) ? rawSource.remoteHead.recentRevisions : []);
+  const derivedRecentRevisions = rawRecentRevisions.length
+    ? rawRecentRevisions
+    : revisions.slice(0, 8).map(entry => ({
+        revisionId: entry.revisionId,
+        baseRevisionId: entry.baseRevisionId || '',
+        payloadSignature: entry.payloadSignature || '',
+        commitStatus: entry.status || 'queued',
+        createdAt: entry.createdAt || '',
+        authorDeviceId: entry.deviceId || '',
+        snapshotCounts: entry.counts || {}
+      }));
+  const recentRevisions = derivedRecentRevisions
+    .map(normalizeRemoteRevisionSummary)
+    .filter(Boolean);
+  const remoteHistoryCount = Number.isFinite(Number(rawSource.remoteHistoryCount))
+    ? Number(rawSource.remoteHistoryCount)
+    : (Number.isFinite(Number(rawSource.remoteHead?.historyCount))
+      ? Number(rawSource.remoteHead.historyCount)
+      : revisions.length);
   const sourceName = typeof rawSource.sourceName === 'string' && rawSource.sourceName.trim() ? rawSource.sourceName.trim() : 'bundle-remot.json';
   const importedAt = typeof rawSource.importedAt === 'string' && !Number.isNaN(Date.parse(rawSource.importedAt))
     ? rawSource.importedAt
@@ -1157,6 +1265,8 @@ function normalizeRemoteShadowSource(rawSource) {
     version: Number(rawSource.version || 1),
     sourceName,
     importedAt,
+    remoteHistoryCount,
+    recentRevisions,
     state: {
       ...state,
       lastRevisionId: headRevisionId,
@@ -1166,21 +1276,186 @@ function normalizeRemoteShadowSource(rawSource) {
   };
 }
 
+function normalizeRemoteSnapshotCounts(rawCounts) {
+  if (!rawCounts || typeof rawCounts !== 'object') return null;
+  const normalized = {
+    folders: Number(rawCounts.folders || 0),
+    documents: Number(rawCounts.documents || 0),
+    deleted: Number(rawCounts.deleted || 0),
+    versions: Number(rawCounts.versions || 0),
+    attachments: Number(rawCounts.attachments || 0),
+    total: Number(rawCounts.total || 0)
+  };
+  return Object.values(normalized).some(value => Number.isFinite(value) && value > 0) ? normalized : null;
+}
+
+function normalizeRemoteRevisionSummary(rawRevision) {
+  if (!rawRevision || typeof rawRevision !== 'object') return null;
+  const commitStatus = typeof rawRevision.commitStatus === 'string' && rawRevision.commitStatus.trim()
+    ? rawRevision.commitStatus.trim()
+    : (typeof rawRevision.commit_status === 'string' ? rawRevision.commit_status.trim() : 'unknown');
+  return {
+    revisionId: typeof rawRevision.revisionId === 'string' && rawRevision.revisionId.trim()
+      ? rawRevision.revisionId.trim()
+      : (typeof rawRevision.revision_id === 'string' ? rawRevision.revision_id.trim() : ''),
+    baseRevisionId: typeof rawRevision.baseRevisionId === 'string'
+      ? rawRevision.baseRevisionId
+      : (typeof rawRevision.base_revision_id === 'string' ? rawRevision.base_revision_id : ''),
+    payloadSignature: typeof rawRevision.payloadSignature === 'string'
+      ? rawRevision.payloadSignature
+      : (typeof rawRevision.payload_signature === 'string' ? rawRevision.payload_signature : ''),
+    commitStatus,
+    createdAt: typeof rawRevision.createdAt === 'string' && !Number.isNaN(Date.parse(rawRevision.createdAt))
+      ? rawRevision.createdAt
+      : (typeof rawRevision.created_at === 'string' && !Number.isNaN(Date.parse(rawRevision.created_at)) ? rawRevision.created_at : ''),
+    authorDeviceId: typeof rawRevision.authorDeviceId === 'string'
+      ? rawRevision.authorDeviceId
+      : (typeof rawRevision.author_device_id === 'string' ? rawRevision.author_device_id : ''),
+    snapshotCounts: normalizeRemoteSnapshotCounts(
+      rawRevision.snapshotCounts
+      || rawRevision.snapshot_counts
+      || rawRevision.counts
+      || null
+    )
+  };
+}
+
+function validateRemoteShadowRevisionIntegrity(entry, expectedWorkspaceId = '') {
+  const payload = entry?.payload && typeof entry.payload === 'object' ? entry.payload : null;
+  const revisionLabel = createShadowSyncShortId(entry?.revisionId || '');
+  const syncDocs = Array.isArray(payload?.snapshot?.docs) ? payload.snapshot.docs : null;
+  if (!payload || payload.schema !== SYNC_PAYLOAD_SCHEMA || !syncDocs) {
+    throw new Error(`El bundle remot té una revisió incompatible (${revisionLabel}).`);
+  }
+
+  const revisionWorkspaceId = entry.workspaceId || payload.workspace?.id || '';
+  if (!revisionWorkspaceId) {
+    throw new Error(`El bundle remot té una revisió sense workspace (${revisionLabel}).`);
+  }
+  if (expectedWorkspaceId && revisionWorkspaceId !== expectedWorkspaceId) {
+    throw new Error('El bundle remot barreja revisions de workspaces diferents.');
+  }
+  if ((payload.workspace?.id || '') && payload.workspace.id !== revisionWorkspaceId) {
+    throw new Error(`El bundle remot té una revisió amb workspace inconsistent (${revisionLabel}).`);
+  }
+  if (!entry.payloadSignature) {
+    throw new Error(`El bundle remot té una revisió sense payloadSignature (${revisionLabel}).`);
+  }
+
+  const expectedSignature = createSyncPayloadSignature(payload);
+  if (entry.payloadSignature !== expectedSignature) {
+    throw new Error(`El bundle remot té una revisió amb payload inconsistent (${revisionLabel}).`);
+  }
+
+  const expectedCounts = createSyncPayloadCounts(syncDocs);
+  if (stableShadowSyncStringify(entry.counts || {}) !== stableShadowSyncStringify(expectedCounts)) {
+    throw new Error(`El bundle remot té una revisió amb comptadors inconsistents (${revisionLabel}).`);
+  }
+  if (payload.snapshot?.counts && stableShadowSyncStringify(payload.snapshot.counts) !== stableShadowSyncStringify(expectedCounts)) {
+    throw new Error(`El bundle remot té un snapshot inconsistent (${revisionLabel}).`);
+  }
+}
+
+function validateRemoteShadowSourceIntegrity(source, options = {}) {
+  if (!source || typeof source !== 'object') {
+    throw new Error('La font remota actual no és vàlida.');
+  }
+
+  const revisions = normalizeShadowSyncHistory(source.revisions);
+  if (!revisions.length) {
+    throw new Error('El bundle remot no conté revisions shadow vàlides.');
+  }
+
+  const declaredHeadRevisionId = source.state?.lastRevisionId || '';
+  if (declaredHeadRevisionId && !revisions.some(entry => entry.revisionId === declaredHeadRevisionId)) {
+    throw new Error('L\'estat remot apunta a un head que no existeix dins del bundle.');
+  }
+
+  const headEntry = getShadowHistoryHead(revisions, declaredHeadRevisionId || revisions[0]?.revisionId || '');
+  if (!headEntry) {
+    throw new Error('No s\'ha pogut resoldre el head del bundle remot.');
+  }
+
+  const workspaceId = headEntry.workspaceId || headEntry.payload?.workspace?.id || '';
+  revisions.forEach(entry => validateRemoteShadowRevisionIntegrity(entry, workspaceId));
+
+  if (source.state?.lastPayloadSignature && headEntry.payloadSignature !== source.state.lastPayloadSignature) {
+    throw new Error('L\'estat remot no concorda amb la payloadSignature del head.');
+  }
+
+  const rawStateHistoryCount = Number(options.rawState?.historyCount || 0);
+  if (rawStateHistoryCount && rawStateHistoryCount !== revisions.length) {
+    throw new Error('L\'estat remot declara un historyCount inconsistent amb el bundle.');
+  }
+
+  const remoteHistoryCount = Number(options.rawRemoteHistoryCount || source.remoteHistoryCount || 0);
+  if (remoteHistoryCount && remoteHistoryCount < revisions.length) {
+    throw new Error('L\'historial remot declarat és més curt que el bundle descarregat.');
+  }
+
+  const remoteDescriptor = options.remoteDescriptor;
+  if (remoteDescriptor && typeof remoteDescriptor === 'object') {
+    const descriptorWorkspaceId = readRemoteProviderHeadField(remoteDescriptor, ['workspaceId', 'workspace_id', 'localWorkspaceId', 'local_workspace_id']);
+    const descriptorHeadRevisionId = readRemoteProviderHeadField(remoteDescriptor, ['headRevisionId', 'head_revision_id', 'currentRevisionId', 'current_revision_id']);
+    const descriptorPayloadSignature = readRemoteProviderHeadField(remoteDescriptor, ['payloadSignature', 'payload_signature']);
+    const descriptorHistoryCount = Number(remoteDescriptor?.historyCount || remoteDescriptor?.history_count || 0) || 0;
+    if (descriptorWorkspaceId && workspaceId && descriptorWorkspaceId !== workspaceId) {
+      throw new Error('El head remot declarat apunta a un altre workspace.');
+    }
+    if (descriptorHeadRevisionId && descriptorHeadRevisionId !== headEntry.revisionId) {
+      throw new Error('El head remot declarat no coincideix amb el bundle descarregat.');
+    }
+    if (descriptorPayloadSignature && headEntry.payloadSignature && descriptorPayloadSignature !== headEntry.payloadSignature) {
+      throw new Error('La payloadSignature del head remot no coincideix amb el bundle descarregat.');
+    }
+    if (descriptorHistoryCount && descriptorHistoryCount < revisions.length) {
+      throw new Error('El head remot declara menys historial del que porta el bundle descarregat.');
+    }
+  }
+
+  return {
+    headEntry,
+    revisions,
+    workspaceId
+  };
+}
+
 function readRemoteShadowSourceSnapshot() {
-  return normalizeRemoteShadowSource(safeJSONParse(localStorage.getItem(REMOTE_SHADOW_SOURCE_KEY), null));
+  const rawSource = safeJSONParse(localStorage.getItem(REMOTE_SHADOW_SOURCE_KEY), null);
+  if (!rawSource) return null;
+  try {
+    const normalized = normalizeRemoteShadowSource(rawSource);
+    validateRemoteShadowSourceIntegrity(normalized);
+    return normalized;
+  } catch (err) {
+    console.warn("He descartat una font remota corrupta de shadow sync.", err);
+    localStorage.removeItem(REMOTE_SHADOW_SOURCE_KEY);
+    return null;
+  }
+}
+
+function normalizeRemoteShadowAutomationDraft(rawDraft) {
+  return {
+    autoCheckOnStart: rawDraft?.autoCheckOnStart !== false,
+    autoPullWhenClean: rawDraft?.autoPullWhenClean === true,
+    autoPushWhenStable: rawDraft?.autoPushWhenStable === true
+  };
 }
 
 function normalizeRemoteShadowConfig(rawConfig) {
   if (!rawConfig || typeof rawConfig !== 'object') return null;
   const trimmedUrl = typeof rawConfig.url === 'string' ? rawConfig.url.trim() : '';
   if (!trimmedUrl) return null;
+  const automation = normalizeRemoteShadowAutomationDraft(rawConfig);
   return {
     mode: rawConfig.mode === 'provider-head-url' ? 'provider-head-url' : 'bundle-url',
     url: trimmedUrl,
     lastFetchedAt: typeof rawConfig.lastFetchedAt === 'string' ? rawConfig.lastFetchedAt : '',
     lastStatus: typeof rawConfig.lastStatus === 'string' ? rawConfig.lastStatus : 'idle',
     lastError: typeof rawConfig.lastError === 'string' ? rawConfig.lastError : '',
-    autoCheckOnStart: rawConfig.autoCheckOnStart !== false
+    autoCheckOnStart: automation.autoCheckOnStart,
+    autoPullWhenClean: automation.autoPullWhenClean,
+    autoPushWhenStable: automation.autoPushWhenStable
   };
 }
 
@@ -1188,8 +1463,57 @@ function readRemoteShadowConfigSnapshot() {
   return normalizeRemoteShadowConfig(safeJSONParse(localStorage.getItem(REMOTE_SHADOW_CONFIG_KEY), null));
 }
 
+function getEffectiveRemoteShadowAutomationConfig(config = remoteShadowConfig) {
+  return normalizeRemoteShadowAutomationDraft(config || remoteShadowAutomationDraft);
+}
+
+function buildRemoteShadowConfigSnapshot(overrides = {}) {
+  const effectiveConfig = remoteShadowConfig || {};
+  const automation = normalizeRemoteShadowAutomationDraft({
+    ...getEffectiveRemoteShadowAutomationConfig(effectiveConfig),
+    ...remoteShadowAutomationDraft,
+    ...overrides
+  });
+  return {
+    mode: overrides.mode || effectiveConfig.mode || getSelectedRemoteShadowMode(),
+    url: typeof overrides.url === 'string'
+      ? overrides.url
+      : (effectiveConfig.url || ''),
+    lastFetchedAt: typeof overrides.lastFetchedAt === 'string'
+      ? overrides.lastFetchedAt
+      : (effectiveConfig.lastFetchedAt || ''),
+    lastStatus: typeof overrides.lastStatus === 'string'
+      ? overrides.lastStatus
+      : (effectiveConfig.lastStatus || 'idle'),
+    lastError: typeof overrides.lastError === 'string'
+      ? overrides.lastError
+      : (effectiveConfig.lastError || ''),
+    autoCheckOnStart: automation.autoCheckOnStart,
+    autoPullWhenClean: automation.autoPullWhenClean,
+    autoPushWhenStable: automation.autoPushWhenStable
+  };
+}
+
+function setRemoteShadowAutomationDraft(partialDraft = {}, options = {}) {
+  remoteShadowAutomationDraft = normalizeRemoteShadowAutomationDraft({
+    ...remoteShadowAutomationDraft,
+    ...partialDraft
+  });
+  const { persist = false, recheckAutomation = false } = options;
+  if (persist && remoteShadowConfig?.url) {
+    writeRemoteShadowConfigSnapshot(buildRemoteShadowConfigSnapshot(remoteShadowAutomationDraft));
+    if (recheckAutomation) queueRemoteShadowAutomation('settings-change', { immediate: true });
+    return;
+  }
+  updateRemoteShadowUI();
+  if (recheckAutomation) queueRemoteShadowAutomation('settings-change', { immediate: true });
+}
+
 function writeRemoteShadowConfigSnapshot(config) {
   if (!config) {
+    if (remoteAutoSyncTimer) clearTimeout(remoteAutoSyncTimer);
+    remoteAutoSyncTimer = null;
+    lastRemoteAutoSyncKey = '';
     localStorage.removeItem(REMOTE_SHADOW_CONFIG_KEY);
     remoteShadowConfig = null;
     updateRemoteShadowUI();
@@ -1208,25 +1532,199 @@ function writeRemoteShadowConfigSnapshot(config) {
     console.warn("No s'ha pogut persistir la configuració remota de shadow sync.", err);
   }
   remoteShadowConfig = normalized;
+  remoteShadowAutomationDraft = normalizeRemoteShadowAutomationDraft(normalized);
   remoteShadowDraftUrl = normalized.url || remoteShadowDraftUrl;
   updateRemoteShadowUI();
   return normalized;
 }
 
+function normalizeRemoteRevisionDownloadEntry(rawEntry, fallbackRevisionId = '') {
+  if (!rawEntry || typeof rawEntry !== 'object') return null;
+  const revisionId = typeof rawEntry.revisionId === 'string' && rawEntry.revisionId.trim()
+    ? rawEntry.revisionId.trim()
+    : (typeof fallbackRevisionId === 'string' ? fallbackRevisionId.trim() : '');
+  if (!revisionId) return null;
+  const downloadedAt = typeof rawEntry.downloadedAt === 'string' && !Number.isNaN(Date.parse(rawEntry.downloadedAt))
+    ? rawEntry.downloadedAt
+    : '';
+  return {
+    revisionId,
+    workspaceId: typeof rawEntry.workspaceId === 'string' ? rawEntry.workspaceId : '',
+    sourceName: typeof rawEntry.sourceName === 'string' ? rawEntry.sourceName : '',
+    fileName: typeof rawEntry.fileName === 'string' ? rawEntry.fileName : '',
+    downloadedAt: downloadedAt || new Date().toISOString()
+  };
+}
+
+function normalizeRemoteRevisionDownloadRegistry(rawRegistry) {
+  if (!rawRegistry || typeof rawRegistry !== 'object') return {};
+  return Object.entries(rawRegistry).reduce((registry, [revisionId, rawEntry]) => {
+    const normalizedEntry = normalizeRemoteRevisionDownloadEntry(rawEntry, revisionId);
+    if (normalizedEntry) {
+      registry[normalizedEntry.revisionId] = normalizedEntry;
+    }
+    return registry;
+  }, {});
+}
+
+function readRemoteRevisionDownloadRegistry() {
+  return normalizeRemoteRevisionDownloadRegistry(safeJSONParse(localStorage.getItem(REMOTE_REVISION_DOWNLOADS_KEY), null));
+}
+
+function writeRemoteRevisionDownloadRegistry(registry) {
+  const normalized = normalizeRemoteRevisionDownloadRegistry(registry);
+  try {
+    if (Object.keys(normalized).length) {
+      localStorage.setItem(REMOTE_REVISION_DOWNLOADS_KEY, JSON.stringify(normalized));
+    } else {
+      localStorage.removeItem(REMOTE_REVISION_DOWNLOADS_KEY);
+    }
+  } catch (err) {
+    console.warn("No s'ha pogut persistir el registre local de revisions remotes descarregades.", err);
+  }
+  remoteRevisionDownloads = normalized;
+  updateRemoteShadowUI();
+  return normalized;
+}
+
+function getRemoteRevisionDownloadRecord(revisionId, registry = remoteRevisionDownloads) {
+  const normalizedRevisionId = typeof revisionId === 'string' ? revisionId.trim() : '';
+  if (!normalizedRevisionId || !registry || typeof registry !== 'object') return null;
+  return normalizeRemoteRevisionDownloadEntry(registry[normalizedRevisionId], normalizedRevisionId);
+}
+
+function rememberRemoteRevisionDownload(revision, fileName) {
+  const revisionId = typeof revision?.revisionId === 'string' ? revision.revisionId.trim() : '';
+  if (!revisionId) return null;
+  const nextEntry = normalizeRemoteRevisionDownloadEntry({
+    revisionId,
+    workspaceId: revision.workspaceId || revision.payload?.workspace?.id || '',
+    sourceName: remoteShadowSource?.sourceName || '',
+    fileName: typeof fileName === 'string' ? fileName.trim() : '',
+    downloadedAt: new Date().toISOString()
+  }, revisionId);
+  if (!nextEntry) return null;
+  const registry = writeRemoteRevisionDownloadRegistry({
+    ...normalizeRemoteRevisionDownloadRegistry(remoteRevisionDownloads),
+    [revisionId]: nextEntry
+  });
+  return registry[revisionId] || null;
+}
+
+function normalizeRemoteRevisionApplicationType(rawType) {
+  return rawType === 'restore' ? 'restore' : 'apply';
+}
+
+function normalizeRemoteRevisionApplicationEntry(rawEntry, fallbackRevisionId = '') {
+  if (!rawEntry || typeof rawEntry !== 'object') return null;
+  const revisionId = typeof rawEntry.revisionId === 'string' && rawEntry.revisionId.trim()
+    ? rawEntry.revisionId.trim()
+    : (typeof fallbackRevisionId === 'string' ? fallbackRevisionId.trim() : '');
+  if (!revisionId) return null;
+  const appliedAt = typeof rawEntry.appliedAt === 'string' && !Number.isNaN(Date.parse(rawEntry.appliedAt))
+    ? rawEntry.appliedAt
+    : '';
+  return {
+    revisionId,
+    actionType: normalizeRemoteRevisionApplicationType(rawEntry.actionType),
+    workspaceId: typeof rawEntry.workspaceId === 'string' ? rawEntry.workspaceId : '',
+    sourceName: typeof rawEntry.sourceName === 'string' ? rawEntry.sourceName : '',
+    localRevisionId: typeof rawEntry.localRevisionId === 'string' ? rawEntry.localRevisionId : '',
+    appliedAt: appliedAt || new Date().toISOString()
+  };
+}
+
+function normalizeRemoteRevisionApplicationRegistry(rawRegistry) {
+  if (!rawRegistry || typeof rawRegistry !== 'object') return {};
+  return Object.entries(rawRegistry).reduce((registry, [revisionId, rawEntry]) => {
+    const normalizedEntry = normalizeRemoteRevisionApplicationEntry(rawEntry, revisionId);
+    if (normalizedEntry) {
+      registry[normalizedEntry.revisionId] = normalizedEntry;
+    }
+    return registry;
+  }, {});
+}
+
+function readRemoteRevisionApplicationRegistry() {
+  return normalizeRemoteRevisionApplicationRegistry(safeJSONParse(localStorage.getItem(REMOTE_REVISION_APPLICATIONS_KEY), null));
+}
+
+function writeRemoteRevisionApplicationRegistry(registry) {
+  const normalized = normalizeRemoteRevisionApplicationRegistry(registry);
+  try {
+    if (Object.keys(normalized).length) {
+      localStorage.setItem(REMOTE_REVISION_APPLICATIONS_KEY, JSON.stringify(normalized));
+    } else {
+      localStorage.removeItem(REMOTE_REVISION_APPLICATIONS_KEY);
+    }
+  } catch (err) {
+    console.warn("No s'ha pogut persistir el registre local de revisions remotes aplicades.", err);
+  }
+  remoteRevisionApplications = normalized;
+  updateRemoteShadowUI();
+  return normalized;
+}
+
+function getRemoteRevisionApplicationRecord(revisionId, registry = remoteRevisionApplications) {
+  const normalizedRevisionId = typeof revisionId === 'string' ? revisionId.trim() : '';
+  if (!normalizedRevisionId || !registry || typeof registry !== 'object') return null;
+  return normalizeRemoteRevisionApplicationEntry(registry[normalizedRevisionId], normalizedRevisionId);
+}
+
+function rememberRemoteRevisionApplication(revision, options = {}) {
+  const revisionId = typeof revision?.revisionId === 'string' ? revision.revisionId.trim() : '';
+  if (!revisionId) return null;
+  const nextEntry = normalizeRemoteRevisionApplicationEntry({
+    revisionId,
+    actionType: normalizeRemoteRevisionApplicationType(options.actionType),
+    workspaceId: revision.workspaceId || revision.payload?.workspace?.id || '',
+    sourceName: remoteShadowSource?.sourceName || '',
+    localRevisionId: typeof options.localRevisionId === 'string' ? options.localRevisionId.trim() : '',
+    appliedAt: new Date().toISOString()
+  }, revisionId);
+  if (!nextEntry) return null;
+  const registry = writeRemoteRevisionApplicationRegistry({
+    ...normalizeRemoteRevisionApplicationRegistry(remoteRevisionApplications),
+    [revisionId]: nextEntry
+  });
+  return registry[revisionId] || null;
+}
+
+function getRemoteRevisionApplicationBadgeLabel(record) {
+  if (!record) return '';
+  return record.actionType === 'restore' ? 'Recuperada aquí' : 'Aplicada aquí';
+}
+
+function getRemoteRevisionApplicationLeadText(record) {
+  if (!record) return '';
+  const lead = record.actionType === 'restore' ? 'Recuperada localment' : 'Aplicada localment';
+  return `${lead} ${formatShadowSyncMoment(record.appliedAt || '')}.`;
+}
+
 function writeRemoteShadowSourceSnapshot(source) {
   if (!source) {
+    lastRemoteAutoSyncKey = '';
     localStorage.removeItem(REMOTE_SHADOW_SOURCE_KEY);
     remoteShadowSource = null;
+    selectedRemoteHistoryRevisionId = '';
     updateRemoteShadowUI();
     return null;
   }
   const normalized = normalizeRemoteShadowSource(source);
+  validateRemoteShadowSourceIntegrity(normalized, {
+    rawState: source?.state,
+    rawRemoteHistoryCount: source?.remoteHistoryCount,
+    remoteDescriptor: source?.remoteHead
+  });
   try {
     localStorage.setItem(REMOTE_SHADOW_SOURCE_KEY, JSON.stringify(normalized));
   } catch (err) {
     console.warn("No s'ha pogut persistir la font remota de shadow sync.", err);
   }
   remoteShadowSource = normalized;
+  if (!selectedRemoteHistoryRevisionId || !normalized.recentRevisions.some(entry => entry.revisionId === selectedRemoteHistoryRevisionId)) {
+    selectedRemoteHistoryRevisionId = normalized.state.lastRevisionId || normalized.recentRevisions[0]?.revisionId || '';
+  }
   updateRemoteShadowUI();
   return normalized;
 }
@@ -1824,10 +2322,27 @@ function readRemoteProviderHeadField(candidate, keys = []) {
   return '';
 }
 
+function readRemoteProviderHeadArrayField(candidate, keys = []) {
+  for (const key of keys) {
+    const value = candidate?.[key];
+    if (Array.isArray(value)) return value;
+  }
+  return [];
+}
+
 function createRemoteShadowConnectionError(message, remoteStatus = 'error') {
   const err = new Error(message);
   err.remoteStatus = remoteStatus;
   return err;
+}
+
+async function readJsonResponseSafely(response) {
+  if (!response) return null;
+  try {
+    return await response.json();
+  } catch (_err) {
+    return null;
+  }
 }
 
 function normalizeRemoteProviderHead(rawHead, sourceUrl = '', providerProfile = remoteProviderProfile) {
@@ -1869,6 +2384,10 @@ function normalizeRemoteProviderHead(rawHead, sourceUrl = '', providerProfile = 
     bundleUrl: resolvedBundleUrl,
     bundleStoragePath: rawBundleStoragePath,
     bundleAccess,
+    historyCount: Number(candidate?.historyCount || candidate?.history_count || 0) || 0,
+    recentRevisions: readRemoteProviderHeadArrayField(candidate, ['recentRevisions', 'recent_revisions'])
+      .map(normalizeRemoteRevisionSummary)
+      .filter(Boolean),
     fetchedAt: readRemoteProviderHeadField(candidate, ['fetchedAt', 'fetched_at', 'updatedAt', 'updated_at']) || new Date().toISOString()
   };
 }
@@ -1956,22 +2475,23 @@ async function connectRemoteShadowUrl(options = {}) {
     }
   }
 
-  writeRemoteShadowConfigSnapshot({
+  writeRemoteShadowConfigSnapshot(buildRemoteShadowConfigSnapshot({
     mode,
     url: effectiveUrl,
     lastStatus: 'checking',
     lastFetchedAt: remoteShadowConfig?.lastFetchedAt || '',
-    lastError: '',
-    autoCheckOnStart: true
-  });
+    lastError: ''
+  }));
   try {
     let parsed;
     let sourceName = effectiveUrl;
+    let remoteDescriptor = null;
     if (mode === 'provider-head-url') {
       const providerProfile = writeRemoteProviderProfileSnapshot(draftProviderProfile);
       const providerSecret = persistRemoteProviderSecret(draftProviderSecret, providerProfile.rememberSecret);
       const providerResult = await fetchRemoteShadowBundleFromProviderHead(effectiveUrl, providerProfile, providerSecret);
       parsed = providerResult.bundle;
+      remoteDescriptor = providerResult.descriptor;
       sourceName = providerResult.descriptor.bundleUrl;
       writeRemoteProviderProfileSnapshot({
         ...providerProfile,
@@ -1983,34 +2503,38 @@ async function connectRemoteShadowUrl(options = {}) {
     const normalized = writeRemoteShadowSourceSnapshot({
       ...parsed,
       sourceName,
-      importedAt: new Date().toISOString()
+      importedAt: new Date().toISOString(),
+      remoteHead: remoteDescriptor,
+      remoteHistoryCount: remoteDescriptor?.historyCount || 0,
+      recentRevisions: remoteDescriptor?.recentRevisions || []
     });
-    writeRemoteShadowConfigSnapshot({
+    writeRemoteShadowConfigSnapshot(buildRemoteShadowConfigSnapshot({
       mode,
       url: effectiveUrl,
       lastStatus: 'connected',
       lastFetchedAt: new Date().toISOString(),
-      lastError: '',
-      autoCheckOnStart: true
-    });
+      lastError: ''
+    }));
     const comparison = computeRemoteShadowComparison();
     if (!silent) {
       showToast(`URL remota connectada: ${normalized?.sourceName || effectiveUrl}`);
       if (comparison.status === 'remote-ahead') {
-        showToast('El remot va per davant. Encara no faré pull automàtic en aquesta fase.', 'info');
+        showToast(comparison.detailText || 'El remot va per davant. Si tens el pull automàtic activat i el local està net, Sutsumu el podrà aplicar sol.', 'info');
+      } else if (comparison.status === 'local-ahead') {
+        showToast(comparison.detailText || 'El local va per davant. Si tens el push automàtic activat i el local està estable, Sutsumu el podrà enviar sol.', 'info');
       }
     }
+    queueRemoteShadowAutomation(silent ? 'connect-silent' : 'connect', { immediate: true });
     return true;
   } catch (err) {
     console.warn("No s'ha pogut connectar la URL remota de shadow sync.", err);
-    writeRemoteShadowConfigSnapshot({
+    writeRemoteShadowConfigSnapshot(buildRemoteShadowConfigSnapshot({
       mode,
       url: effectiveUrl,
       lastStatus: err?.remoteStatus || 'error',
       lastFetchedAt: remoteShadowConfig?.lastFetchedAt || '',
-      lastError: err?.message || 'remote-fetch-error',
-      autoCheckOnStart: true
-    });
+      lastError: err?.message || 'remote-fetch-error'
+    }));
     if (!silent) showToast(err?.message || "No s'ha pogut connectar la URL remota.", 'error');
     return false;
   }
@@ -2026,6 +2550,428 @@ function getShadowHistoryHead(history = shadowSyncHistory, preferredRevisionId =
   return normalizedHistory[0];
 }
 
+function describeRemoteRevisionLog(source = remoteShadowSource) {
+  if (!source) return '';
+  const historyCount = Number(source.remoteHistoryCount || source.revisions?.length || 0);
+  if (!historyCount) return '';
+  const latest = Array.isArray(source.recentRevisions) && source.recentRevisions.length ? source.recentRevisions[0] : null;
+  let summary = `Historial remot: ${historyCount} revisions.`;
+  if (latest?.createdAt) {
+    const statusLabel = getRemoteRevisionStatusLabel(latest.commitStatus, { lowercase: true });
+    summary += ` Última ${statusLabel} a ${formatShadowSyncMoment(latest.createdAt)}.`;
+  }
+  return summary;
+}
+
+function getRemoteRevisionStatusLabel(status = '', options = {}) {
+  const { lowercase = false } = options;
+  const labels = {
+    committed: 'Confirmada',
+    staged: 'Preparada',
+    'head-conflict': 'Conflicte head',
+    queued: 'Pendent',
+    unknown: 'Desconeguda'
+  };
+  const base = labels[status] || (status ? String(status) : labels.unknown);
+  return lowercase ? base.toLowerCase() : base;
+}
+
+function describeRemoteRevisionSnapshotCounts(counts = null) {
+  if (!counts || typeof counts !== 'object') return '';
+  const folders = Number(counts.folders || 0);
+  const documents = Number(counts.documents || 0);
+  const deleted = Number(counts.deleted || 0);
+  const total = Number(counts.total || 0);
+  const parts = [];
+  if (folders > 0) parts.push(`${folders} ${folders === 1 ? 'carpeta' : 'carpetes'}`);
+  if (documents > 0) parts.push(`${documents} ${documents === 1 ? 'document' : 'documents'}`);
+  if (deleted > 0) parts.push(`${deleted} ${deleted === 1 ? 'element eliminat' : 'elements eliminats'}`);
+  if (!parts.length && total > 0) {
+    parts.push(`${total} ${total === 1 ? 'element' : 'elements'}`);
+  }
+  return parts.join(' · ');
+}
+
+function normalizeRemoteHistoryFilter(value) {
+  return ['all', 'pending', 'downloaded', 'applied', 'restored'].includes(value)
+    ? value
+    : 'all';
+}
+
+function getRemoteHistoryFilterLabel(filter = activeRemoteHistoryFilter) {
+  const normalized = normalizeRemoteHistoryFilter(filter);
+  const labels = {
+    all: 'totes les revisions recents',
+    pending: 'les revisions pendents de revisar',
+    downloaded: 'les revisions descarregades',
+    applied: 'les revisions aplicades localment',
+    restored: 'les revisions recuperades localment'
+  };
+  return labels[normalized] || labels.all;
+}
+
+function matchesRemoteHistoryFilter(entry, filter = activeRemoteHistoryFilter) {
+  const normalized = normalizeRemoteHistoryFilter(filter);
+  if (normalized === 'pending') {
+    return !entry?.downloadRecord && !entry?.applicationRecord;
+  }
+  if (normalized === 'downloaded') {
+    return Boolean(entry?.downloadRecord);
+  }
+  if (normalized === 'applied') {
+    return entry?.applicationRecord?.actionType === 'apply';
+  }
+  if (normalized === 'restored') {
+    return entry?.applicationRecord?.actionType === 'restore';
+  }
+  return true;
+}
+
+function buildRemoteRevisionRelationBadges(revision, context = {}) {
+  const badges = [{
+    label: getRemoteRevisionStatusLabel(revision.commitStatus),
+    className: revision.commitStatus === 'head-conflict' ? 'is-conflict' : ''
+  }];
+  if (context.downloadRecord) {
+    badges.push({ label: 'Descarregada', className: 'is-downloaded' });
+  }
+  if (context.applicationRecord) {
+    badges.push({ label: getRemoteRevisionApplicationBadgeLabel(context.applicationRecord), className: 'is-applied' });
+  }
+  if (revision.revisionId === context.remoteHeadId) {
+    badges.push({ label: 'Head remot', className: 'is-head' });
+  }
+  if (revision.revisionId === context.localHeadId) {
+    badges.push({ label: 'Head local', className: 'is-local' });
+  }
+  if (revision.revisionId && revision.revisionId === context.commonAncestorId) {
+    badges.push({ label: 'Base compartida', className: 'is-base' });
+  }
+  return badges;
+}
+
+function buildRemoteRevisionInspectorState(source = remoteShadowSource, comparison = computeRemoteShadowComparison()) {
+  if (!source) return null;
+  const entries = Array.isArray(source.recentRevisions) ? source.recentRevisions.filter(Boolean) : [];
+  if (!entries.length) return null;
+  const remoteHeadId = comparison?.remoteHead?.revisionId || source.state?.lastRevisionId || '';
+  const localHeadId = comparison?.localHead?.revisionId || shadowSyncState?.lastRevisionId || '';
+  const commonAncestorId = comparison?.commonAncestor?.revisionId || '';
+  const enrichedEntries = entries.map(entry => {
+    const downloadRecord = getRemoteRevisionDownloadRecord(entry.revisionId);
+    const applicationRecord = getRemoteRevisionApplicationRecord(entry.revisionId);
+    return {
+      ...entry,
+      downloadRecord,
+      applicationRecord,
+      shortId: createShadowSyncShortId(entry.revisionId),
+      countsText: describeRemoteRevisionSnapshotCounts(entry.snapshotCounts),
+      badges: buildRemoteRevisionRelationBadges(entry, {
+        remoteHeadId,
+        localHeadId,
+        commonAncestorId,
+        downloadRecord,
+        applicationRecord
+      })
+    };
+  });
+  const activeFilter = normalizeRemoteHistoryFilter(activeRemoteHistoryFilter);
+  const filterCounts = {
+    all: enrichedEntries.length,
+    pending: enrichedEntries.filter(entry => matchesRemoteHistoryFilter(entry, 'pending')).length,
+    downloaded: enrichedEntries.filter(entry => matchesRemoteHistoryFilter(entry, 'downloaded')).length,
+    applied: enrichedEntries.filter(entry => matchesRemoteHistoryFilter(entry, 'applied')).length,
+    restored: enrichedEntries.filter(entry => matchesRemoteHistoryFilter(entry, 'restored')).length
+  };
+  const filteredEntries = enrichedEntries.filter(entry => matchesRemoteHistoryFilter(entry, activeFilter));
+  const selectedId = filteredEntries.some(entry => entry.revisionId === selectedRemoteHistoryRevisionId)
+    ? selectedRemoteHistoryRevisionId
+    : (filteredEntries.find(entry => entry.revisionId === remoteHeadId)?.revisionId || filteredEntries[0]?.revisionId || '');
+  if (selectedId && selectedRemoteHistoryRevisionId !== selectedId) {
+    selectedRemoteHistoryRevisionId = selectedId;
+  }
+  const selected = filteredEntries.find(entry => entry.revisionId === selectedId) || filteredEntries[0] || null;
+  return {
+    totalCount: Number(source.remoteHistoryCount || entries.length || 0),
+    visibleCount: filteredEntries.length,
+    allCount: enrichedEntries.length,
+    activeFilter,
+    filterCounts,
+    entries: filteredEntries,
+    selected,
+    remoteHeadId,
+    localHeadId,
+    commonAncestorId
+  };
+}
+
+function getRemoteHistoryRevisionEntry(source = remoteShadowSource, revisionId = selectedRemoteHistoryRevisionId) {
+  if (!source || !revisionId) return null;
+  return normalizeShadowSyncHistory(source.revisions).find(entry => entry.revisionId === revisionId) || null;
+}
+
+function collectRemoteHistoryRevisionLineage(source = remoteShadowSource, revisionId = selectedRemoteHistoryRevisionId) {
+  if (!source || !revisionId) return [];
+  const byId = new Map(normalizeShadowSyncHistory(source.revisions).map(entry => [entry.revisionId, entry]));
+  const lineage = [];
+  const visited = new Set();
+  let cursor = revisionId;
+  while (cursor && byId.has(cursor) && !visited.has(cursor)) {
+    const entry = byId.get(cursor);
+    lineage.push(entry);
+    visited.add(cursor);
+    cursor = entry?.baseRevisionId || '';
+  }
+  return lineage;
+}
+
+function createRemoteHistoryRevisionBundle(selectedRevisionId = selectedRemoteHistoryRevisionId, source = remoteShadowSource) {
+  const revisionId = typeof selectedRevisionId === 'string' ? selectedRevisionId.trim() : '';
+  if (!revisionId) return null;
+  const lineage = collectRemoteHistoryRevisionLineage(source, revisionId);
+  if (!lineage.length) return null;
+  return createStandaloneShadowSyncBundle(lineage, {
+    lastRevisionId: revisionId,
+    lastReason: 'remote-history-export',
+    lastRemoteStatus: 'remote-history-exported'
+  });
+}
+
+function getRemoteHistoryRevisionRecoveryReadiness(selectedRevisionId = selectedRemoteHistoryRevisionId, source = remoteShadowSource) {
+  if (!source) {
+    return {
+      canRestore: false,
+      status: 'no-remote',
+      message: 'Encara no hi ha cap remot carregat per recuperar revisions.',
+      revision: null,
+      remoteHead: null,
+      payload: null,
+      syncDocs: [],
+      attachmentSummary: summarizeRemoteAttachmentTransport([]),
+      pullPreview: null,
+      currentRemoteHeadId: '',
+      isCurrentHead: false
+    };
+  }
+
+  const revisionId = typeof selectedRevisionId === 'string' ? selectedRevisionId.trim() : '';
+  if (!revisionId) {
+    return {
+      canRestore: false,
+      status: 'not-selected',
+      message: 'Selecciona una revisió remota per poder-la recuperar.',
+      revision: null,
+      remoteHead: null,
+      payload: null,
+      syncDocs: [],
+      attachmentSummary: summarizeRemoteAttachmentTransport([]),
+      pullPreview: null,
+      currentRemoteHeadId: source.state?.lastRevisionId || '',
+      isCurrentHead: false
+    };
+  }
+
+  const revision = getRemoteHistoryRevisionEntry(source, revisionId);
+  const currentRemoteHeadId = source.state?.lastRevisionId || '';
+  const isCurrentHead = revisionId === currentRemoteHeadId;
+  if (!revision) {
+    return {
+      canRestore: false,
+      status: 'not-loaded',
+      message: 'Aquesta revisió encara no està disponible dins del bundle remot descarregat. De moment només se’n pot inspeccionar el resum.',
+      revision: null,
+      remoteHead: null,
+      payload: null,
+      syncDocs: [],
+      attachmentSummary: summarizeRemoteAttachmentTransport([]),
+      pullPreview: null,
+      currentRemoteHeadId,
+      isCurrentHead
+    };
+  }
+
+  const payload = revision.payload && typeof revision.payload === 'object' ? revision.payload : null;
+  const syncDocs = Array.isArray(payload?.snapshot?.docs) ? payload.snapshot.docs : [];
+  const attachmentSummary = summarizeRemoteAttachmentTransport(syncDocs);
+  if (!payload || payload.schema !== SYNC_PAYLOAD_SCHEMA || !Array.isArray(payload.snapshot?.docs)) {
+    return {
+      canRestore: false,
+      status: 'invalid-remote',
+      message: 'Aquesta revisió remota no porta un payload sincronitzable compatible.',
+      revision,
+      remoteHead: revision,
+      payload: null,
+      syncDocs: [],
+      attachmentSummary,
+      pullPreview: null,
+      currentRemoteHeadId,
+      isCurrentHead
+    };
+  }
+
+  const pullPreview = createRemotePullPreview(syncDocs);
+  if (!pullPreview?.totalChanged) {
+    return {
+      canRestore: false,
+      status: 'already-local',
+      message: isCurrentHead
+        ? 'El head remot actual ja coincideix amb l’estat local visible.'
+        : 'Aquesta revisió no introduiria cap canvi visible respecte al local actual.',
+      revision,
+      remoteHead: revision,
+      payload,
+      syncDocs,
+      attachmentSummary,
+      pullPreview,
+      currentRemoteHeadId,
+      isCurrentHead
+    };
+  }
+
+  return {
+    canRestore: true,
+    status: isCurrentHead ? 'current-head' : 'history-revision',
+    message: isCurrentHead
+      ? `Es pot aplicar el head remot seleccionat amb còpia crítica prèvia.${pullPreview?.summaryText ? ` Recovery previst: ${pullPreview.summaryText}` : ''}`
+      : `Es pot recuperar aquesta revisió remota anterior amb còpia crítica i una còpia portable del local actual.${pullPreview?.summaryText ? ` Recovery previst: ${pullPreview.summaryText}` : ''}`,
+    revision,
+    remoteHead: revision,
+    payload,
+    syncDocs,
+    attachmentSummary,
+    pullPreview,
+    currentRemoteHeadId,
+    isCurrentHead
+  };
+}
+
+function buildRemoteRevisionHistoryLeadText(state) {
+  if (!state || !state.allCount) return 'Encara no hi ha historial remot per inspeccionar.';
+  if (!state.entries.length) {
+    return `No hi ha cap coincidència dins de ${getRemoteHistoryFilterLabel(state.activeFilter)}. Pots canviar el filtre per veure la resta de revisions recents.`;
+  }
+  const shown = state.visibleCount || state.entries.length;
+  const total = state.totalCount || state.allCount || shown;
+  const countLabel = `${shown} ${shown === 1 ? 'revisió' : 'revisions'}`;
+  const filterLead = state.activeFilter === 'all'
+    ? ''
+    : ` Filtre actiu: ${getRemoteHistoryFilterLabel(state.activeFilter)}.`;
+  if (total > shown) {
+    return `Mostrant ${countLabel} recents de ${total}.${filterLead} Selecciona'n una per inspeccionar-la; encara no s'apliquen revisions antigues directament.`;
+  }
+  return `Historial remot carregat: ${countLabel} disponibles per inspeccionar abans del següent pull o recovery.${filterLead}`;
+}
+
+function buildRemoteRevisionBadgesHtml(badges = []) {
+  if (!Array.isArray(badges) || !badges.length) return '';
+  return `
+    <div class="sync-remote-history-badges">
+      ${badges.map(badge => `<span class="sync-remote-history-badge${badge.className ? ` ${badge.className}` : ''}">${escapeHtml(badge.label)}</span>`).join('')}
+    </div>
+  `.trim();
+}
+
+function renderRemoteRevisionHistoryEntryHtml(entry, selectedRevisionId = '') {
+  const detailParts = [
+    entry.countsText,
+    entry.authorDeviceId ? `Dispositiu ${createShadowSyncShortId(entry.authorDeviceId)}` : ''
+  ].filter(Boolean);
+  return `
+    <button
+      type="button"
+      class="sync-remote-history-entry${entry.revisionId === selectedRevisionId ? ' is-selected' : ''}"
+      data-remote-history-id="${escapeHtml(entry.revisionId)}"
+    >
+      <div class="sync-remote-history-entry-main">
+        <strong>${escapeHtml(entry.shortId)}</strong>
+        <span class="sync-remote-history-entry-date">${escapeHtml(formatShadowSyncMoment(entry.createdAt || ''))}</span>
+      </div>
+      <div class="sync-remote-history-entry-meta">${escapeHtml(detailParts.join(' · ') || 'Sense metadades extra')}</div>
+      ${buildRemoteRevisionBadgesHtml(entry.badges)}
+    </button>
+  `.trim();
+}
+
+function renderRemoteRevisionDetailHtml(state) {
+  if (!state?.selected) {
+    return state?.allCount
+      ? '<p class="sync-prep-text">Aquest filtre no deixa cap revisió visible ara mateix. Prova un altre filtre per veure\'n el context.</p>'
+      : '<p class="sync-prep-text">Selecciona una revisió remota per veure\'n el context.</p>';
+  }
+  const selected = state.selected;
+  const recoveryReadiness = getRemoteHistoryRevisionRecoveryReadiness(selected.revisionId);
+  const exportBundle = createRemoteHistoryRevisionBundle(selected.revisionId);
+  const relationParts = [];
+  if (selected.revisionId === state.remoteHeadId) relationParts.push('Aquesta és la revisió que defineix el head remot actual.');
+  if (selected.revisionId === state.localHeadId) relationParts.push('Coincideix amb el head local d’aquest dispositiu.');
+  if (selected.revisionId === state.commonAncestorId) relationParts.push('És la base compartida visible entre el local i el remot.');
+  if (selected.downloadRecord) relationParts.push('Ja la vas descarregar abans en aquest dispositiu.');
+  if (selected.applicationRecord) relationParts.push(selected.applicationRecord.actionType === 'restore' ? 'També la vas recuperar localment en aquest dispositiu.' : 'També la vas aplicar localment en aquest dispositiu.');
+  if (!relationParts.length) relationParts.push('És una revisió recent del registre remot, útil per entendre l’evolució del workspace.');
+  const baseRevisionLabel = selected.baseRevisionId ? createShadowSyncShortId(selected.baseRevisionId) : 'arrel';
+  const downloadLeadText = selected.downloadRecord
+    ? `Descarregada localment ${formatShadowSyncMoment(selected.downloadRecord.downloadedAt || '')}${selected.downloadRecord.fileName ? ` com ${selected.downloadRecord.fileName}` : ''}.`
+    : 'Encara no has descarregat aquesta revisió com a bundle portable.';
+  const applicationLeadText = getRemoteRevisionApplicationLeadText(selected.applicationRecord);
+  const recoveryLeadText = recoveryReadiness.canRestore
+    ? (recoveryReadiness.isCurrentHead
+      ? `Si apliques aquesta revisió, ${recoveryReadiness.pullPreview?.summaryText || 'Sutsumu substituirà l’estat local visible amb el head remot actual.'}`
+      : `És una revisió anterior al head remot actual. Si la recuperes ara, ${recoveryReadiness.pullPreview?.summaryText || 'Sutsumu substituirà l’estat local visible per aquesta versió anterior.'}`)
+    : recoveryReadiness.message;
+  const downloadButtonLabel = selected.downloadRecord ? 'Tornar a descarregar revisió' : 'Descarregar revisió';
+  const recoveryButtonLabel = recoveryReadiness.isCurrentHead ? 'Aplicar aquesta revisió' : 'Recuperar aquesta revisió';
+  return `
+    <div class="sync-prep-list-label">Revisió seleccionada</div>
+    <p class="sync-prep-text">${escapeHtml(relationParts.join(' '))}</p>
+    ${buildRemoteRevisionBadgesHtml(selected.badges)}
+    <div class="sync-remote-history-detail-grid">
+      <div class="sync-remote-history-detail-item">
+        <span>Revisió</span>
+        <strong>${escapeHtml(selected.shortId)}</strong>
+      </div>
+      <div class="sync-remote-history-detail-item">
+        <span>Creada</span>
+        <strong>${escapeHtml(formatShadowSyncMoment(selected.createdAt || ''))}</strong>
+      </div>
+      <div class="sync-remote-history-detail-item">
+        <span>Base anterior</span>
+        <strong>${escapeHtml(baseRevisionLabel)}</strong>
+      </div>
+      <div class="sync-remote-history-detail-item">
+        <span>Payload</span>
+        <strong>${escapeHtml(createShadowSyncShortId(selected.payloadSignature || ''))}</strong>
+      </div>
+    </div>
+    <p class="sync-prep-text">${escapeHtml(selected.countsText || 'Sense resum de snapshot disponible per a aquesta revisió.')}</p>
+    ${selected.authorDeviceId ? `<p class="sync-prep-text">${escapeHtml(`Dispositiu autor: ${createShadowSyncShortId(selected.authorDeviceId)}`)}</p>` : ''}
+    <p class="sync-prep-text">${escapeHtml(downloadLeadText)}</p>
+    ${applicationLeadText ? `<p class="sync-prep-text">${escapeHtml(applicationLeadText)}</p>` : ''}
+    <div class="sync-remote-history-recovery">
+      <div class="sync-prep-list-label">Recovery segur</div>
+      <p class="sync-prep-text">${escapeHtml(recoveryLeadText || 'Aquesta revisió encara no es pot recuperar directament.')}</p>
+      ${recoveryReadiness.pullPreview ? buildRemotePullPreviewGroupsHtml(recoveryReadiness.pullPreview, { entryLimit: 2 }) : ''}
+      <div class="sync-prep-actions sync-remote-history-actions">
+        <button
+          id="downloadRemoteHistoryRevisionBtn"
+          type="button"
+          class="btn btn-secondary btn-small"
+          data-remote-history-download-id="${escapeHtml(selected.revisionId)}"
+          ${exportBundle ? '' : 'disabled'}
+          title="${escapeHtml(exportBundle ? (selected.downloadRecord ? 'Torna a descarregar aquesta revisió com a bundle portable.' : 'Descarrega aquesta revisió com a bundle portable.') : 'Aquesta revisió encara no es pot descarregar.')}"
+        >${escapeHtml(downloadButtonLabel)}</button>
+        <button
+          id="restoreRemoteHistoryRevisionBtn"
+          type="button"
+          class="btn btn-primary btn-small"
+          data-remote-history-restore-id="${escapeHtml(selected.revisionId)}"
+          ${recoveryReadiness.canRestore ? '' : 'disabled'}
+          title="${escapeHtml(recoveryReadiness.canRestore ? '' : (recoveryReadiness.message || 'Aquesta revisió encara no es pot recuperar.'))}"
+        >${escapeHtml(recoveryButtonLabel)}</button>
+      </div>
+    </div>
+  `.trim();
+}
+
 function buildShadowRevisionAncestry(history, headRevisionId) {
   const byId = new Map(normalizeShadowSyncHistory(history).map(entry => [entry.revisionId, entry]));
   const visited = new Set();
@@ -2037,17 +2983,75 @@ function buildShadowRevisionAncestry(history, headRevisionId) {
   return visited;
 }
 
+function buildShadowRevisionLineage(history, headRevisionId) {
+  const byId = new Map(normalizeShadowSyncHistory(history).map(entry => [entry.revisionId, entry]));
+  const lineage = [];
+  const visited = new Set();
+  let cursor = headRevisionId;
+  while (cursor && byId.has(cursor) && !visited.has(cursor)) {
+    const entry = byId.get(cursor);
+    lineage.push(entry);
+    visited.add(cursor);
+    cursor = entry?.baseRevisionId || '';
+  }
+  return lineage;
+}
+
+function countShadowRevisionLabel(value) {
+  const count = Number(value || 0);
+  return `${count} ${count === 1 ? 'revisió' : 'revisions'}`;
+}
+
+function describeShadowCommonAncestor(entry) {
+  if (entry?.isRoot) return 'arrel';
+  return entry?.revisionId ? createShadowSyncShortId(entry.revisionId) : 'sense base visible';
+}
+
+function buildShadowComparisonContext(localHistory, localHeadRevisionId, remoteHistory, remoteHeadRevisionId) {
+  const localLineage = buildShadowRevisionLineage(localHistory, localHeadRevisionId);
+  const remoteLineage = buildShadowRevisionLineage(remoteHistory, remoteHeadRevisionId);
+  const remoteIndexes = new Map(remoteLineage.map((entry, index) => [entry.revisionId, index]));
+
+  for (let localAheadCount = 0; localAheadCount < localLineage.length; localAheadCount += 1) {
+    const entry = localLineage[localAheadCount];
+    const remoteAheadCount = remoteIndexes.get(entry?.revisionId);
+    if (entry?.revisionId && Number.isInteger(remoteAheadCount)) {
+      return {
+        localLineage,
+        remoteLineage,
+        commonAncestor: entry,
+        localAheadCount,
+        remoteAheadCount
+      };
+    }
+  }
+
+  return {
+    localLineage,
+    remoteLineage,
+    commonAncestor: localLineage.length && remoteLineage.length
+      && !localLineage[localLineage.length - 1]?.baseRevisionId
+      && !remoteLineage[remoteLineage.length - 1]?.baseRevisionId
+      ? { revisionId: '', isRoot: true }
+      : null,
+    localAheadCount: localLineage.length,
+    remoteAheadCount: remoteLineage.length
+  };
+}
+
 function computeRemoteShadowComparison() {
   const remoteHead = getShadowHistoryHead(remoteShadowSource?.revisions || [], remoteShadowSource?.state?.lastRevisionId || '');
   const localHead = getShadowHistoryHead(shadowSyncHistory, shadowSyncState?.lastRevisionId || '');
   const localWorkspaceId = syncPrepState?.workspace?.id || '';
   const remoteWorkspaceId = remoteHead?.workspaceId || remoteHead?.payload?.workspace?.id || '';
+  const remoteHistoryCount = Number(remoteShadowSource?.remoteHistoryCount || remoteShadowSource?.revisions?.length || 0);
 
   if (!remoteHead) {
     return {
       status: 'no-remote',
       label: 'Sense remot',
       description: 'Encara no hi ha cap bundle remot importat per comparar.',
+      compareValue: 'Sense remot',
       localHead,
       remoteHead
     };
@@ -2058,6 +3062,10 @@ function computeRemoteShadowComparison() {
       status: 'remote-only',
       label: 'Remot disponible',
       description: 'Hi ha una revisió remota disponible, però aquest dispositiu encara no té cap head local comparable.',
+      detailText: remoteHistoryCount > 0
+        ? `El remot carregat resumeix ${countShadowRevisionLabel(remoteHistoryCount)}.`
+        : '',
+      compareValue: remoteHistoryCount > 0 ? `Remot disponible · ${remoteHistoryCount} rev.` : 'Remot disponible',
       localHead,
       remoteHead
     };
@@ -2068,6 +3076,7 @@ function computeRemoteShadowComparison() {
       status: 'other-workspace',
       label: 'Un altre workspace',
       description: 'El bundle remot pertany a un workspace diferent. No es compararà ni s\'aplicarà automàticament.',
+      compareValue: 'Workspace diferent',
       localHead,
       remoteHead
     };
@@ -2078,6 +3087,10 @@ function computeRemoteShadowComparison() {
       status: 'in-sync',
       label: 'Al dia',
       description: 'El head local i el remot comparteixen exactament el mateix payload base.',
+      detailText: localHead.revisionId
+        ? `El head compartit és ${createShadowSyncShortId(localHead.revisionId)}.`
+        : '',
+      compareValue: localHead.revisionId ? `Al dia · ${createShadowSyncShortId(localHead.revisionId)}` : 'Al dia',
       localHead,
       remoteHead
     };
@@ -2085,34 +3098,633 @@ function computeRemoteShadowComparison() {
 
   const localAncestry = buildShadowRevisionAncestry(shadowSyncHistory, localHead.revisionId);
   const remoteAncestry = buildShadowRevisionAncestry(remoteShadowSource?.revisions || [], remoteHead.revisionId);
+  const comparisonContext = buildShadowComparisonContext(
+    shadowSyncHistory,
+    localHead.revisionId,
+    remoteShadowSource?.revisions || [],
+    remoteHead.revisionId
+  );
 
   if (remoteAncestry.has(localHead.revisionId)) {
+    const remoteAheadLabel = countShadowRevisionLabel(comparisonContext.remoteAheadCount || 1);
     return {
       status: 'remote-ahead',
       label: 'Remot més nou',
-      description: 'El bundle remot conté una revisió més avançada que el head local d\'aquest dispositiu.',
+      description: `El bundle remot conté ${remoteAheadLabel} més avançades que el head local d'aquest dispositiu.`,
+      detailText: `El remot afegeix ${remoteAheadLabel} sobre el teu head local.`,
+      compareValue: `Remot més nou · +${comparisonContext.remoteAheadCount || 1}`,
+      commonAncestor: comparisonContext.commonAncestor,
+      localAheadCount: 0,
+      remoteAheadCount: comparisonContext.remoteAheadCount || 1,
       localHead,
       remoteHead
     };
   }
 
   if (localAncestry.has(remoteHead.revisionId)) {
+    const localAheadLabel = countShadowRevisionLabel(comparisonContext.localAheadCount || 1);
     return {
       status: 'local-ahead',
       label: 'Local més nou',
-      description: 'Aquest dispositiu ja té una revisió local més nova que la importada com a remot.',
+      description: `Aquest dispositiu ja té ${localAheadLabel} més noves que la revisió remota importada.`,
+      detailText: `El local afegeix ${localAheadLabel} sobre el head remot.`,
+      compareValue: `Local més nou · +${comparisonContext.localAheadCount || 1}`,
+      commonAncestor: comparisonContext.commonAncestor,
+      localAheadCount: comparisonContext.localAheadCount || 1,
+      remoteAheadCount: 0,
       localHead,
       remoteHead
     };
   }
 
+  const commonAncestorLabel = describeShadowCommonAncestor(comparisonContext.commonAncestor);
+  const divergenceDetail = comparisonContext.commonAncestor
+    ? `Base compartida ${commonAncestorLabel}. Local +${comparisonContext.localAheadCount}; remot +${comparisonContext.remoteAheadCount}.`
+    : `No hi ha una base compartida visible dins de l'historial carregat. Local +${comparisonContext.localAheadCount}; remot +${comparisonContext.remoteAheadCount}.`;
   return {
     status: 'diverged',
     label: 'Divergència',
-    description: 'El head local i el remot han evolucionat per branques diferents. Caldrà resolució de conflicte abans d\'un pull/push real.',
+    description: `El head local i el remot han evolucionat per branques diferents. ${divergenceDetail}`,
+    detailText: divergenceDetail,
+    compareValue: comparisonContext.commonAncestor
+      ? `Divergència · base ${commonAncestorLabel} · L+${comparisonContext.localAheadCount} / R+${comparisonContext.remoteAheadCount}`
+      : `Divergència · L+${comparisonContext.localAheadCount} / R+${comparisonContext.remoteAheadCount}`,
+    commonAncestor: comparisonContext.commonAncestor,
+    localAheadCount: comparisonContext.localAheadCount,
+    remoteAheadCount: comparisonContext.remoteAheadCount,
     localHead,
     remoteHead
   };
+}
+
+function getLocalSyncStabilityState() {
+  const hasDraftEdits = shouldGuardEditClose();
+  const currentPayload = docs.length ? createSyncPayloadPreview(docs) : null;
+  const currentSignature = currentPayload ? createSyncPayloadSignature(currentPayload) : '';
+  const matchesShadowHead = !docs.length
+    ? true
+    : Boolean(currentSignature && currentSignature === shadowSyncState?.lastPayloadSignature);
+  if (hasDraftEdits) {
+    return {
+      status: 'editing',
+      shortLabel: 'Editant',
+      humanText: 'Hi ha un document obert amb canvis encara no consolidats.',
+      isClean: false,
+      canAutoPull: false,
+      canAutoPush: false,
+      currentSignature,
+      matchesShadowHead
+    };
+  }
+  if (workspaceDirty) {
+    return {
+      status: 'workspace-dirty',
+      shortLabel: 'Workspace pendent',
+      humanText: 'El workspace encara té canvis pendents de desar o exportar.',
+      isClean: false,
+      canAutoPull: false,
+      canAutoPush: matchesShadowHead,
+      currentSignature,
+      matchesShadowHead
+    };
+  }
+  if (!matchesShadowHead) {
+    return {
+      status: 'shadow-pending',
+      shortLabel: 'Preparant',
+      humanText: 'El local encara està preparant o consolidant la revisió shadow més recent.',
+      isClean: false,
+      canAutoPull: false,
+      canAutoPush: false,
+      currentSignature,
+      matchesShadowHead
+    };
+  }
+  return {
+    status: 'clean',
+    shortLabel: docs.length ? 'Net' : 'Buit',
+    humanText: docs.length
+      ? 'El local està net i ja coincideix amb la seva darrera revisió shadow.'
+      : 'Aquest dispositiu no té canvis locals visibles pendents.',
+    isClean: true,
+    canAutoPull: true,
+    canAutoPush: true,
+    currentSignature,
+    matchesShadowHead
+  };
+}
+
+function getRemoteAutoPushAttachmentPolicy(currentDocs = docs) {
+  const attachmentDocs = getAttachmentDocuments(currentDocs);
+  const summary = attachmentDocs.reduce((acc, item) => {
+    acc.total += 1;
+    const size = Number(item.fileSize || (isRealBlob(item.fileBlob) ? item.fileBlob.size : 0) || 0);
+    acc.totalBytes += size;
+    if (!isRealBlob(item.fileBlob)) {
+      acc.missingLocal += 1;
+    }
+    if (size > AUTO_REMOTE_PUSH_INLINE_ATTACHMENT_MAX_BYTES) {
+      acc.heavy += 1;
+    }
+    return acc;
+  }, {
+    total: 0,
+    totalBytes: 0,
+    missingLocal: 0,
+    heavy: 0
+  });
+  if (summary.total === 0) {
+    return {
+      ...summary,
+      canAutoPush: true,
+      message: 'No hi ha adjunts locals que bloquegin el push automàtic.'
+    };
+  }
+  if (summary.missingLocal > 0) {
+    return {
+      ...summary,
+      canAutoPush: false,
+      message: `El push automàtic queda en pausa perquè hi ha ${summary.missingLocal} adjunts sense binari local recuperable en aquest dispositiu.`
+    };
+  }
+  if (summary.heavy > 0) {
+    return {
+      ...summary,
+      canAutoPush: false,
+      message: `El push automàtic queda en pausa perquè hi ha ${summary.heavy} adjunts massa grans per enviar en segon pla.`
+    };
+  }
+  if (summary.totalBytes > AUTO_REMOTE_PUSH_TOTAL_INLINE_BYTES) {
+    return {
+      ...summary,
+      canAutoPush: false,
+      message: `El push automàtic queda en pausa perquè els adjunts sumen ${formatBytes(summary.totalBytes)}, per sobre del límit prudent en aquesta fase.`
+    };
+  }
+  return {
+    ...summary,
+    canAutoPush: true,
+    message: `Els ${summary.total} adjunts actuals encara entren dins del marge segur per al push automàtic.`
+  };
+}
+
+function buildRemoteConflictGuidance(comparison = computeRemoteShadowComparison(), localState = getLocalSyncStabilityState(), attachmentPolicy = getRemoteAutoPushAttachmentPolicy()) {
+  if (!comparison) {
+    return {
+      text: 'Quan hi hagi un remot connectat, Sutsumu t’explicarà què passa abans de tocar res.',
+      items: []
+    };
+  }
+  const items = [];
+  if (comparison.status === 'diverged') {
+    items.push('Revisa les revisions remotes recents abans de decidir: pots inspeccionar-les, descarregar-les o recuperar-ne una.');
+    items.push('Si vols prioritzar el remot sense perdre el local, fes servir "Resoldre divergència": guardarà una còpia local segura abans d’aplicar-lo.');
+    if (!localState.isClean) {
+      items.push(`Abans d’automatitzar res, convé deixar el local net. Ara mateix: ${localState.humanText}`);
+    }
+  } else if (comparison.status === 'other-workspace') {
+    items.push('Aquest remot pertany a un altre workspace. No s’aplicarà ni s’enviarà automàticament aquí.');
+    items.push('Si el vols conservar igualment, el pots inspeccionar o descarregar com a bundle portable abans de desconnectar-lo.');
+  } else if (remoteShadowConfig?.lastStatus === 'conflict') {
+    items.push('El head remot ha canviat entre la lectura i el darrer intent de push. Torna a comparar abans de reintentar.');
+    items.push('No s’ha sobreescrit res en silenci: el backend ha tallat l’operació expressament.');
+  } else if (attachmentPolicy.total > 0 && !attachmentPolicy.canAutoPush) {
+    items.push(attachmentPolicy.message);
+    items.push('El push manual continua disponible perquè puguis decidir quan empaquetar o revisar aquests adjunts.');
+  }
+  const text = comparison.status === 'diverged'
+    ? 'Local i remot han evolucionat per camins diferents, però Sutsumu manté una sortida segura i no aplica res a cegues.'
+    : (comparison.status === 'other-workspace'
+      ? 'El remot s’ha detectat correctament, però no pertany a aquest workspace local.'
+      : (remoteShadowConfig?.lastStatus === 'conflict'
+        ? 'Hi ha hagut una carrera al remot, però no s’ha perdut cap dada: només cal tornar a comparar.'
+        : (items.length
+          ? 'Sutsumu manté visibles les sortides segures abans de qualsevol canvi remot delicat.'
+          : 'Quan aparegui un conflicte real, aquí tindràs una explicació simple i les opcions segures.')));
+  return { text, items };
+}
+
+function buildRemoteAutomationStatusText(comparison = computeRemoteShadowComparison(), localState = getLocalSyncStabilityState(), attachmentPolicy = getRemoteAutoPushAttachmentPolicy(), config = getEffectiveRemoteShadowAutomationConfig()) {
+  if (!remoteShadowConfig?.url) {
+    return 'Connecta una URL o backend remot per activar els automatismes segurs d’aquesta fase.';
+  }
+  const parts = [`Estat local: ${localState.shortLabel}. ${localState.humanText}`];
+  if (remoteAutoSyncInFlight) {
+    parts.push('Sutsumu està executant ara mateix una comprovació o acció automàtica segura.');
+  }
+  parts.push(config.autoCheckOnStart
+    ? 'Sutsumu tornarà a comprovar aquest remot en obrir.'
+    : 'La comprovació automàtica en obrir està desactivada.');
+  if (config.autoPullWhenClean) {
+    parts.push(localState.canAutoPull
+      ? 'Si el remot va clarament per davant, es podrà aplicar automàticament amb xarxa de seguretat.'
+      : 'El pull automàtic queda en pausa fins que el local torni a estar net.');
+  } else {
+    parts.push('El pull automàtic està desactivat.');
+  }
+  if (config.autoPushWhenStable) {
+    if (!attachmentPolicy.canAutoPush) {
+      parts.push(attachmentPolicy.message);
+    } else {
+      parts.push(localState.canAutoPush
+        ? (localState.isClean
+          ? 'Si el local queda per davant i el backend continua coherent, es podrà fer push automàtic.'
+          : 'Tot i que el workspace extern encara no estigui desat, el head local ja és prou estable per permetre un push automàtic.')
+        : 'El push automàtic queda en pausa fins que el local torni a estar estable.');
+    }
+  } else {
+    parts.push('El push automàtic està desactivat.');
+  }
+  return parts.join(' ');
+}
+
+function buildRemoteAutoSyncKey(action, comparison = computeRemoteShadowComparison(), localState = getLocalSyncStabilityState(), attachmentPolicy = getRemoteAutoPushAttachmentPolicy(), config = getEffectiveRemoteShadowAutomationConfig()) {
+  return stableShadowSyncStringify({
+    action,
+    remoteUrl: remoteShadowConfig?.url || '',
+    remoteStatus: remoteShadowConfig?.lastStatus || '',
+    comparison: comparison?.status || '',
+    localState: localState?.status || '',
+    localSignature: localState?.currentSignature || '',
+    localHeadRevisionId: comparison?.localHead?.revisionId || shadowSyncState?.lastRevisionId || '',
+    remoteHeadRevisionId: comparison?.remoteHead?.revisionId || remoteShadowSource?.state?.lastRevisionId || '',
+    autoCheckOnStart: config.autoCheckOnStart,
+    autoPullWhenClean: config.autoPullWhenClean,
+    autoPushWhenStable: config.autoPushWhenStable,
+    attachmentPolicy: {
+      canAutoPush: attachmentPolicy.canAutoPush,
+      total: attachmentPolicy.total,
+      missingLocal: attachmentPolicy.missingLocal,
+      heavy: attachmentPolicy.heavy,
+      totalBytes: attachmentPolicy.totalBytes
+    }
+  });
+}
+
+function queueRemoteShadowAutomation(reason = 'update', options = {}) {
+  const { immediate = false } = options;
+  if (remoteAutoSyncTimer) clearTimeout(remoteAutoSyncTimer);
+  if (!remoteShadowConfig?.url) {
+    remoteAutoSyncTimer = null;
+    lastRemoteAutoSyncKey = '';
+    return;
+  }
+  remoteAutoSyncTimer = setTimeout(() => {
+    remoteAutoSyncTimer = null;
+    runRemoteShadowAutomation(reason);
+  }, immediate ? 0 : REMOTE_AUTO_SYNC_DEBOUNCE_MS);
+}
+
+async function runRemoteShadowAutomation(reason = 'update') {
+  if (remoteAutoSyncInFlight) return false;
+  const config = getEffectiveRemoteShadowAutomationConfig();
+  if (!remoteShadowConfig?.url || remoteShadowConfig?.lastStatus === 'checking') return false;
+
+  const comparison = computeRemoteShadowComparison();
+  const localState = getLocalSyncStabilityState();
+  const attachmentPolicy = getRemoteAutoPushAttachmentPolicy();
+  const pullReadiness = getRemoteShadowPullReadiness(comparison);
+  const pushReadiness = getRemoteShadowPushReadiness(comparison);
+  let action = '';
+
+  if (config.autoPullWhenClean && localState.canAutoPull && pullReadiness.canApply) {
+    action = 'pull';
+  } else if (config.autoPushWhenStable && localState.canAutoPush && attachmentPolicy.canAutoPush && pushReadiness.canPush) {
+    action = 'push';
+  } else {
+    lastRemoteAutoSyncKey = '';
+    updateRemoteShadowUI();
+    return false;
+  }
+
+  const actionKey = buildRemoteAutoSyncKey(action, comparison, localState, attachmentPolicy, config);
+  if (actionKey && actionKey === lastRemoteAutoSyncKey) {
+    return false;
+  }
+
+  lastRemoteAutoSyncKey = actionKey;
+  remoteAutoSyncInFlight = true;
+  updateRemoteShadowUI();
+  try {
+    if (action === 'pull') {
+      return await performRemoteShadowPull(pullReadiness, {
+        confirmationTitle: 'Aplicar el remot automàticament?',
+        okLabel: 'Aplicar remot',
+        warningText: 'Sutsumu només activa aquest pull quan el local està net i crea igualment una còpia crítica abans de tocar res visible.',
+        successPrefix: 'Remot aplicat automàticament perquè el local estava net.',
+        safetyReason: `before-remote-auto-pull-${reason}`,
+        operationLabel: 'aplicar el remot automàticament',
+        saveReason: 'remote-auto-pull',
+        remoteRevisionActionType: 'apply',
+        skipConfirmation: true
+      });
+    }
+    return await performRemoteShadowPush({
+      confirmationTitle: 'Fer push automàtic al remot?',
+      okLabel: 'Fer push',
+      warningText: 'Sutsumu només activa aquest push quan el local està net, el remot està coherent i els adjunts entren dins del marge segur.',
+      successPrefix: 'Push remot automàtic completat.',
+      safetyReason: `before-remote-auto-push-${reason}`,
+      operationLabel: 'fer el push automàtic al remot',
+      createSafetySnapshot: false,
+      skipConfirmation: true
+    });
+  } catch (err) {
+    console.warn("No s'ha pogut completar l'automatització remota.", err);
+    return false;
+  } finally {
+    remoteAutoSyncInFlight = false;
+    updateRemoteShadowUI();
+  }
+}
+
+function rememberRemotePullPreviewSample(list, item) {
+  if (!Array.isArray(list) || !item || typeof item !== 'object') return;
+  const fallbackTitle = item.type === 'folder' ? 'Carpeta sense nom' : 'Document sense nom';
+  const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : fallbackTitle;
+  if (!list.includes(title) && list.length < 3) list.push(title);
+}
+
+function joinRemotePullPreviewParts(parts = []) {
+  const filtered = parts.filter(Boolean);
+  if (!filtered.length) return '';
+  if (filtered.length === 1) return filtered[0];
+  if (filtered.length === 2) return `${filtered[0]} i ${filtered[1]}`;
+  return `${filtered.slice(0, -1).join(', ')} i ${filtered[filtered.length - 1]}`;
+}
+
+function countRemotePullPreviewLabel(count) {
+  const total = Number(count || 0);
+  return `${total} ${total === 1 ? 'element' : 'elements'}`;
+}
+
+function getRemotePullPreviewItemTitle(item) {
+  const fallbackTitle = item?.type === 'folder' ? 'Carpeta sense nom' : 'Document sense nom';
+  return typeof item?.title === 'string' && item.title.trim() ? item.title.trim() : fallbackTitle;
+}
+
+function createRemotePullPreviewQuotedLabel(value = '', options = {}) {
+  const fallback = options.fallback || 'sense nom';
+  const maxLength = Number.isInteger(options.maxLength) ? options.maxLength : 42;
+  const normalized = typeof value === 'string' && value.trim() ? value.trim() : fallback;
+  const clipped = normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength - 1).trimEnd()}...`
+    : normalized;
+  return `"${clipped}"`;
+}
+
+function buildRemotePullPreviewFolderPath(folderId, itemById = new Map()) {
+  const path = [];
+  const visited = new Set();
+  let currentId = folderId;
+  while (currentId && currentId !== 'root' && !visited.has(currentId)) {
+    visited.add(currentId);
+    const folder = itemById.get(currentId);
+    if (!folder || folder.type !== 'folder') break;
+    path.unshift(getRemotePullPreviewItemTitle(folder));
+    currentId = folder.parentId || 'root';
+  }
+  return path;
+}
+
+function formatRemotePullPreviewParentLabel(item, itemById = new Map()) {
+  const path = buildRemotePullPreviewFolderPath(item?.parentId || 'root', itemById);
+  return path.length ? `Arrel / ${path.join(' / ')}` : 'Arrel';
+}
+
+function formatRemotePullPreviewCompact(preview) {
+  if (!preview) return 'pendent';
+  if (!preview.totalChanged) return 'Sense canvis visibles';
+  const parts = [];
+  if (preview.additions > 0) parts.push(`+${preview.additions}`);
+  if (preview.updates > 0) parts.push(`~${preview.updates}`);
+  if (preview.removals > 0) parts.push(`-${preview.removals}`);
+  return parts.join(' · ') || 'Sense canvis visibles';
+}
+
+function buildRemotePullPreviewSummary(preview) {
+  if (!preview) return '';
+  if (!preview.totalChanged) return 'no hi ha canvis visibles respecte al local actual.';
+
+  const summaryParts = [];
+  if (preview.additions > 0) summaryParts.push(`afegirà ${countRemotePullPreviewLabel(preview.additions)}`);
+  if (preview.updates > 0) summaryParts.push(`actualitzarà ${countRemotePullPreviewLabel(preview.updates)}`);
+  if (preview.removals > 0) summaryParts.push(`retirarà ${countRemotePullPreviewLabel(preview.removals)}`);
+  return `${joinRemotePullPreviewParts(summaryParts)}.`;
+}
+
+function buildRemotePullPreviewDetail(preview) {
+  if (!preview) return '';
+  const summary = buildRemotePullPreviewSummary(preview);
+  if (!preview.totalChanged) return summary;
+
+  const sampleParts = [];
+  if (preview.samples.additions.length) sampleParts.push(`afegir ${preview.samples.additions.map(title => `"${title}"`).join(', ')}`);
+  if (preview.samples.updates.length) sampleParts.push(`actualitzar ${preview.samples.updates.map(title => `"${title}"`).join(', ')}`);
+  if (preview.samples.removals.length) sampleParts.push(`retirar ${preview.samples.removals.map(title => `"${title}"`).join(', ')}`);
+
+  let detail = summary;
+  if (sampleParts.length) {
+    detail += ` Exemples: ${sampleParts.join('; ')}.`;
+  }
+  return detail;
+}
+
+function describeRemotePullPreviewChangeBits(localItem, remoteItem) {
+  if (!localItem || !remoteItem) return [];
+  const bits = [];
+  if ((localItem.title || '') !== (remoteItem.title || '')) bits.push('nom');
+  if ((localItem.parentId || 'root') !== (remoteItem.parentId || 'root')) bits.push('carpeta');
+  if (stableShadowSyncStringify(localItem.tags || []) !== stableShadowSyncStringify(remoteItem.tags || [])) bits.push('etiquetes');
+  if (Boolean(localItem.isFavorite) !== Boolean(remoteItem.isFavorite) || Boolean(localItem.isPinned) !== Boolean(remoteItem.isPinned)) bits.push('marcadors');
+
+  if (remoteItem.type === 'folder' || localItem.type === 'folder') {
+    if ((localItem.desc || '') !== (remoteItem.desc || '')) bits.push('descripció');
+    if ((localItem.color || '#0ea5e9') !== (remoteItem.color || '#0ea5e9')) bits.push('color');
+  } else {
+    if ((localItem.category || '') !== (remoteItem.category || '')) bits.push('categoria');
+    if ((localItem.content || '') !== (remoteItem.content || '')) bits.push('contingut');
+    if (stableShadowSyncStringify(localItem.versions || []) !== stableShadowSyncStringify(remoteItem.versions || [])) bits.push('versions');
+    if (stableShadowSyncStringify(localItem.attachment || null) !== stableShadowSyncStringify(remoteItem.attachment || null)) bits.push('adjunt');
+  }
+
+  return Array.from(new Set(bits));
+}
+
+function buildRemotePullPreviewUpdatePhrases(localItem, remoteItem, context = {}) {
+  if (!localItem || !remoteItem) return [];
+  const phrases = [];
+  const currentTitle = getRemotePullPreviewItemTitle(localItem);
+  const nextTitle = getRemotePullPreviewItemTitle(remoteItem);
+  if (currentTitle !== nextTitle) {
+    phrases.push(`reanomena de ${createRemotePullPreviewQuotedLabel(currentTitle)} a ${createRemotePullPreviewQuotedLabel(nextTitle)}`);
+  }
+
+  const currentParentLabel = formatRemotePullPreviewParentLabel(localItem, context.currentById);
+  const nextParentLabel = formatRemotePullPreviewParentLabel(remoteItem, context.targetById);
+  if (currentParentLabel !== nextParentLabel) {
+    phrases.push(`mou de ${currentParentLabel} a ${nextParentLabel}`);
+  }
+
+  const genericBits = describeRemotePullPreviewChangeBits(localItem, remoteItem)
+    .filter(bit => bit !== 'nom' && bit !== 'carpeta')
+    .slice(0, 3);
+  if (genericBits.length) {
+    phrases.push(`canvia ${joinRemotePullPreviewParts(genericBits)}`);
+  }
+  return phrases.slice(0, 3);
+}
+
+function buildRemotePullPreviewPlacementPhrase(kind, item, context = {}) {
+  if (!item) return '';
+  const itemById = kind === 'add' ? context.targetById : context.currentById;
+  const parentLabel = formatRemotePullPreviewParentLabel(item, itemById);
+  return kind === 'add'
+    ? `entrarà a ${parentLabel}`
+    : `sortirà de ${parentLabel}`;
+}
+
+function buildRemotePullPreviewEntry(kind, localItem, remoteItem, context = {}) {
+  const item = remoteItem || localItem || {};
+  const typeLabel = item.type === 'folder' ? 'carpeta' : 'document';
+  const actionLabel = kind === 'add'
+    ? 'Afegirà'
+    : (kind === 'remove' ? 'Retirarà' : 'Actualitzarà');
+  const detailParts = kind === 'update'
+    ? buildRemotePullPreviewUpdatePhrases(localItem, remoteItem, context)
+    : [buildRemotePullPreviewPlacementPhrase(kind, item, context)].filter(Boolean);
+
+  return {
+    id: item.id || '',
+    kind,
+    title: getRemotePullPreviewItemTitle(item),
+    typeLabel,
+    actionLabel,
+    detailText: detailParts.length ? `${typeLabel} · ${detailParts.join(' · ')}` : typeLabel
+  };
+}
+
+function renderRemotePullPreviewEntryHtml(entry) {
+  const kindClass = entry.kind === 'add'
+    ? 'is-add'
+    : (entry.kind === 'remove' ? 'is-remove' : 'is-update');
+  const detailLabel = `${entry.actionLabel} ${entry.detailText}`;
+  return `<li class="sync-remote-preview-item ${kindClass}"><strong>${escapeHtml(entry.title)}</strong><small>${escapeHtml(detailLabel)}</small></li>`;
+}
+
+function buildRemoteChangePreviewLeadText(actionLabel, preview) {
+  if (!preview) return '';
+  if (!preview.totalChanged) return 'No hi ha canvis visibles respecte a l’estat actual.';
+  return `Si ${actionLabel}, Sutsumu ${preview.summaryText}`;
+}
+
+function buildRemotePullPreviewSectionHtml(label, entries = [], options = {}) {
+  if (!Array.isArray(entries) || !entries.length) return '';
+  const entryLimit = Number.isInteger(options.entryLimit) ? options.entryLimit : entries.length;
+  const visibleEntries = entries.slice(0, entryLimit);
+  const hiddenCount = Math.max(entries.length - visibleEntries.length, 0);
+  return `
+    <div class="sync-remote-preview-group">
+      <div class="sync-prep-list-label">${escapeHtml(label)}</div>
+      <ul class="sync-remote-preview-list">${visibleEntries.map(renderRemotePullPreviewEntryHtml).join('')}</ul>
+      ${hiddenCount > 0 ? `<div class="sync-remote-preview-more">i ${hiddenCount} més.</div>` : ''}
+    </div>
+  `.trim();
+}
+
+function buildRemotePullPreviewGroupsHtml(preview, options = {}) {
+  if (!preview || !preview.totalChanged) return '';
+  const sections = [
+    { label: `Afegirà (${preview.additions})`, entries: preview.entries.additions },
+    { label: `Actualitzarà (${preview.updates})`, entries: preview.entries.updates },
+    { label: `Retirarà (${preview.removals})`, entries: preview.entries.removals }
+  ].filter(section => section.entries.length > 0);
+  return sections.map(section => buildRemotePullPreviewSectionHtml(section.label, section.entries, options)).join('');
+}
+
+function createCanonicalPreviewSyncDocs(sourceDocs = []) {
+  return createCanonicalSyncDocsForSignature(sourceDocs);
+}
+
+function createCanonicalPreviewLocalDocs(currentDocs = docs) {
+  return createCanonicalPreviewSyncDocs(normalizeDocs(currentDocs).map(buildSyncItemPayload));
+}
+
+function createRemoteChangePreview(targetDocs = [], currentDocs = []) {
+  const targetItems = createCanonicalPreviewSyncDocs(targetDocs);
+  const currentItems = createCanonicalPreviewSyncDocs(currentDocs);
+  const localById = new Map(currentItems.map(item => [item.id, item]));
+  const remoteById = new Map(targetItems.map(item => [item.id, item]));
+  const previewContext = {
+    currentById: localById,
+    targetById: remoteById
+  };
+  const preview = {
+    additions: 0,
+    updates: 0,
+    removals: 0,
+    unchanged: 0,
+    totalChanged: 0,
+    entries: {
+      additions: [],
+      updates: [],
+      removals: []
+    },
+    samples: {
+      additions: [],
+      updates: [],
+      removals: []
+    }
+  };
+
+  targetItems.forEach(remoteItem => {
+    const localItem = localById.get(remoteItem.id) || null;
+    const localVisible = Boolean(localItem && !localItem.isDeleted);
+    const remoteVisible = Boolean(remoteItem && !remoteItem.isDeleted);
+
+    if (!remoteVisible) return;
+    if (!localVisible && remoteVisible) {
+      preview.additions += 1;
+      preview.entries.additions.push(buildRemotePullPreviewEntry('add', localItem, remoteItem, previewContext));
+      rememberRemotePullPreviewSample(preview.samples.additions, remoteItem);
+      return;
+    }
+    if (stableShadowSyncStringify(localItem) !== stableShadowSyncStringify(remoteItem)) {
+      preview.updates += 1;
+      preview.entries.updates.push(buildRemotePullPreviewEntry('update', localItem, remoteItem, previewContext));
+      rememberRemotePullPreviewSample(preview.samples.updates, remoteItem || localItem);
+      return;
+    }
+    preview.unchanged += 1;
+  });
+
+  currentItems.forEach(localItem => {
+    const remoteItem = remoteById.get(localItem.id) || null;
+    const localVisible = Boolean(localItem && !localItem.isDeleted);
+    const remoteVisible = Boolean(remoteItem && !remoteItem.isDeleted);
+    if (!localVisible || remoteVisible) return;
+    preview.removals += 1;
+    preview.entries.removals.push(buildRemotePullPreviewEntry('remove', localItem, remoteItem, previewContext));
+    rememberRemotePullPreviewSample(preview.samples.removals, localItem);
+  });
+
+  preview.totalChanged = preview.additions + preview.updates + preview.removals;
+  preview.compactValue = formatRemotePullPreviewCompact(preview);
+  preview.summaryText = buildRemotePullPreviewSummary(preview);
+  preview.detailText = buildRemotePullPreviewDetail(preview);
+  return preview;
+}
+
+function createRemotePullPreview(syncDocs = [], currentDocs = docs) {
+  const localItems = createCanonicalPreviewLocalDocs(currentDocs);
+  const remoteItems = createCanonicalPreviewSyncDocs(syncDocs);
+  return createRemoteChangePreview(remoteItems, localItems);
+}
+
+function createRemotePushPreview(syncDocs = [], currentDocs = docs) {
+  const localItems = createCanonicalPreviewLocalDocs(currentDocs);
+  const remoteItems = createCanonicalPreviewSyncDocs(syncDocs);
+  return createRemoteChangePreview(localItems, remoteItems);
 }
 
 function getRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison()) {
@@ -2120,6 +3732,9 @@ function getRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison
   const payload = remoteHead?.payload && typeof remoteHead.payload === 'object' ? remoteHead.payload : null;
   const syncDocs = Array.isArray(payload?.snapshot?.docs) ? payload.snapshot.docs : [];
   const attachmentSummary = summarizeRemoteAttachmentTransport(syncDocs);
+  const pullPreview = payload && payload.schema === SYNC_PAYLOAD_SCHEMA && Array.isArray(payload.snapshot?.docs) && comparison?.status !== 'other-workspace'
+    ? createRemotePullPreview(syncDocs)
+    : null;
   if (!remoteHead) {
     return {
       canApply: false,
@@ -2128,7 +3743,8 @@ function getRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison
       remoteHead,
       payload: null,
       syncDocs: [],
-      attachmentSummary
+      attachmentSummary,
+      pullPreview: null
     };
   }
   if (!payload || payload.schema !== SYNC_PAYLOAD_SCHEMA || !Array.isArray(payload.snapshot?.docs)) {
@@ -2139,7 +3755,8 @@ function getRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison
       remoteHead,
       payload: null,
       syncDocs: [],
-      attachmentSummary
+      attachmentSummary,
+      pullPreview: null
     };
   }
   if (!['remote-ahead', 'remote-only'].includes(comparison?.status)) {
@@ -2156,19 +3773,24 @@ function getRemoteShadowPullReadiness(comparison = computeRemoteShadowComparison
       remoteHead,
       payload,
       syncDocs,
-      attachmentSummary
+      attachmentSummary,
+      pullPreview
     };
   }
   return {
     canApply: true,
     status: comparison.status,
     message: comparison.status === 'remote-only'
-      ? 'Hi ha un remot disponible i aquest dispositiu encara no té cap head local equivalent.'
-      : 'El remot va per davant i es pot importar manualment amb xarxa de seguretat.',
+      ? `Hi ha un remot disponible i aquest dispositiu encara no té cap head local equivalent.${pullPreview?.summaryText ? ` Pull previst: ${pullPreview.summaryText}` : ''}`
+      : (comparison.detailText
+        ? `El remot va per davant i es pot importar manualment amb xarxa de seguretat. ${comparison.detailText}${pullPreview?.summaryText ? ` Pull previst: ${pullPreview.summaryText}` : ''}`
+        : `El remot va per davant i es pot importar manualment amb xarxa de seguretat.${pullPreview?.summaryText ? ` Pull previst: ${pullPreview.summaryText}` : ''}`),
     remoteHead,
     payload,
     syncDocs,
-    attachmentSummary
+    attachmentSummary,
+    pullPreview,
+    comparison
   };
 }
 
@@ -2177,6 +3799,9 @@ function getGuidedRemoteShadowPullReadiness(comparison = computeRemoteShadowComp
   const payload = remoteHead?.payload && typeof remoteHead.payload === 'object' ? remoteHead.payload : null;
   const syncDocs = Array.isArray(payload?.snapshot?.docs) ? payload.snapshot.docs : [];
   const attachmentSummary = summarizeRemoteAttachmentTransport(syncDocs);
+  const pullPreview = payload && payload.schema === SYNC_PAYLOAD_SCHEMA && Array.isArray(payload.snapshot?.docs) && comparison?.status !== 'other-workspace'
+    ? createRemotePullPreview(syncDocs)
+    : null;
   if (!remoteHead) {
     return {
       canGuide: false,
@@ -2185,7 +3810,8 @@ function getGuidedRemoteShadowPullReadiness(comparison = computeRemoteShadowComp
       remoteHead,
       payload,
       syncDocs,
-      attachmentSummary
+      attachmentSummary,
+      pullPreview: null
     };
   }
   if (!payload || payload.schema !== SYNC_PAYLOAD_SCHEMA || !Array.isArray(payload.snapshot?.docs)) {
@@ -2196,7 +3822,8 @@ function getGuidedRemoteShadowPullReadiness(comparison = computeRemoteShadowComp
       remoteHead,
       payload,
       syncDocs,
-      attachmentSummary
+      attachmentSummary,
+      pullPreview: null
     };
   }
   if (comparison?.status !== 'diverged') {
@@ -2214,48 +3841,80 @@ function getGuidedRemoteShadowPullReadiness(comparison = computeRemoteShadowComp
       remoteHead,
       payload,
       syncDocs,
-      attachmentSummary
+      attachmentSummary,
+      pullPreview
     };
   }
   return {
     canGuide: true,
     status: 'diverged',
-    message: 'Hi ha divergència real: Sutsumu pot guardar una còpia del local i després aplicar el remot de manera guiada.',
+    message: comparison?.detailText
+      ? `Hi ha divergència real: ${comparison.detailText}${pullPreview?.summaryText ? ` Pull previst: ${pullPreview.summaryText}` : ''}`
+      : `Hi ha divergència real: Sutsumu pot guardar una còpia del local i després aplicar el remot de manera guiada.${pullPreview?.summaryText ? ` Pull previst: ${pullPreview.summaryText}` : ''}`,
     remoteHead,
     payload,
     syncDocs,
-    attachmentSummary
+    attachmentSummary,
+    pullPreview,
+    comparison
   };
 }
 
 function getRemoteShadowPushReadiness(comparison = computeRemoteShadowComparison()) {
   const currentRemoteUrl = remoteShadowConfig?.url || '';
+  const remoteHead = comparison?.remoteHead || getShadowHistoryHead(remoteShadowSource?.revisions || [], remoteShadowSource?.state?.lastRevisionId || '');
+  const payload = remoteHead?.payload && typeof remoteHead.payload === 'object' ? remoteHead.payload : null;
+  const syncDocs = Array.isArray(payload?.snapshot?.docs) ? payload.snapshot.docs : [];
+  const attachmentPolicy = getRemoteAutoPushAttachmentPolicy();
+  const pushPreview = comparison?.status !== 'other-workspace'
+    ? createRemotePushPreview(syncDocs)
+    : null;
   if (getSelectedRemoteShadowMode() !== 'provider-head-url' || !currentRemoteUrl) {
     return {
       canPush: false,
       status: 'not-configured',
-      message: 'Per fer push manual cal un backend connectat en mode Head backend.'
+      message: 'Per fer push manual cal un backend connectat en mode Head backend.',
+      remoteHead,
+      payload,
+      syncDocs,
+      attachmentPolicy,
+      pushPreview
     };
   }
   if (!docs.length) {
     return {
       canPush: false,
       status: 'empty-local',
-      message: 'Encara no hi ha contingut local per enviar al núvol.'
+      message: 'Encara no hi ha contingut local per enviar al núvol.',
+      remoteHead,
+      payload,
+      syncDocs,
+      attachmentPolicy,
+      pushPreview: null
     };
   }
   if (remoteShadowConfig?.lastStatus === 'checking') {
     return {
       canPush: false,
       status: 'checking',
-      message: 'Sutsumu encara està comprovant el remot configurat.'
+      message: 'Sutsumu encara està comprovant el remot configurat.',
+      remoteHead,
+      payload,
+      syncDocs,
+      attachmentPolicy,
+      pushPreview
     };
   }
   if (['auth-error', 'not-found', 'error'].includes(remoteShadowConfig?.lastStatus || '')) {
     return {
       canPush: false,
       status: remoteShadowConfig.lastStatus,
-      message: remoteShadowConfig.lastError || 'El backend remot actual no està llest per rebre el push.'
+      message: remoteShadowConfig.lastError || 'El backend remot actual no està llest per rebre el push.',
+      remoteHead,
+      payload,
+      syncDocs,
+      attachmentPolicy,
+      pushPreview
     };
   }
   const fallbackMessages = {
@@ -2269,15 +3928,25 @@ function getRemoteShadowPushReadiness(comparison = computeRemoteShadowComparison
     return {
       canPush: false,
       status: comparison?.status || 'not-ready',
-      message: fallbackMessages[comparison?.status] || 'Encara no es pot fer push manual segur.'
+      message: fallbackMessages[comparison?.status] || 'Encara no es pot fer push manual segur.',
+      remoteHead,
+      payload,
+      syncDocs,
+      attachmentPolicy,
+      pushPreview
     };
   }
   return {
     canPush: true,
     status: comparison?.status || 'no-remote',
     message: comparison?.status === 'local-ahead'
-      ? 'El local va per davant i es pot enviar manualment al remot sense sobreescriptura cega.'
-      : 'No hi ha cap head remot encara: aquest push crearà la primera còpia remota.'
+      ? `El local va per davant i es pot enviar manualment al remot sense sobreescriptura cega.${pushPreview?.summaryText ? ` Push previst: ${pushPreview.summaryText}` : ''}`
+      : `No hi ha cap head remot encara: aquest push crearà la primera còpia remota.${pushPreview?.summaryText ? ` Push previst: ${pushPreview.summaryText}` : ''}`,
+    remoteHead,
+    payload,
+    syncDocs,
+    attachmentPolicy,
+    pushPreview
   };
 }
 
@@ -2471,9 +4140,13 @@ async function performRemoteShadowPull(readiness, options = {}) {
     warningText = "Abans de continuar, Sutsumu crearà una còpia crítica de recuperació. Aquesta fase no farà cap pull automàtic ni sobreescriurà el teu workspace extern sense que el desis tu.",
     successPrefix = 'Remot aplicat localment.',
     safetyReason = 'before-remote-manual-pull',
+    operationLabel = 'aplicar el remot manualment',
     saveReason = 'remote-manual-pull',
-    preserveConflictWorkspace = false,
-    requireText = ''
+    preserveWorkspaceCopy = false,
+    requireText = '',
+    introText = '',
+    remoteRevisionActionType = 'apply',
+    skipConfirmation = false
   } = options;
 
   const remoteDate = readiness.remoteHead?.createdAt
@@ -2483,18 +4156,36 @@ async function performRemoteShadowPull(readiness, options = {}) {
   const attachmentWarning = attachmentSummary.total > 0
     ? ` El remot inclou ${attachmentSummary.total} adjunts. Sutsumu conservarà els binaris locals equivalents i validarà qualsevol adjunt remot que vingui inline o amb URL descarregable; la resta quedaran només com a metadades fins a una fase posterior.`
     : '';
-  const conflictWarning = preserveConflictWorkspace
+  const workspaceCopyWarning = preserveWorkspaceCopy
     ? ' També desarà una còpia portable del local actual a Workspaces recents abans de substituir-lo.'
     : '';
+  const messageParts = [
+    `<p>${escapeHtml(introText || `Sutsumu importarà el head remot del ${remoteDate} i substituirà l'estat local visible.`)}</p>`
+  ];
 
-  openConfirm(
-    confirmationTitle,
-    `Sutsumu importarà el head remot del ${remoteDate} i substituirà l'estat local visible.${attachmentWarning}${conflictWarning}`,
-    async () => {
+  if (readiness?.comparison?.detailText) {
+    messageParts.push(`<p><strong>Comparació actual:</strong> ${escapeHtml(readiness.comparison.detailText)}</p>`);
+  }
+  if (readiness?.pullPreview?.summaryText) {
+    messageParts.push(`
+      <div class="confirm-preview-block">
+        <div class="confirm-preview-label">Previsualització del pull: ${escapeHtml(readiness.pullPreview.summaryText)}</div>
+        ${buildRemotePullPreviewGroupsHtml(readiness.pullPreview, { entryLimit: 4 })}
+      </div>
+    `.trim());
+  }
+  if (attachmentWarning) {
+    messageParts.push(`<p>${escapeHtml(attachmentWarning.trim())}</p>`);
+  }
+  if (workspaceCopyWarning) {
+    messageParts.push(`<p>${escapeHtml(workspaceCopyWarning.trim())}</p>`);
+  }
+
+  const runPullOperation = async () => {
       try {
-        const canContinue = await prepareSafetySnapshotOrAbort(safetyReason, preserveConflictWorkspace ? 'resoldre la divergència amb el remot' : 'aplicar el remot manualment');
+        const canContinue = await prepareSafetySnapshotOrAbort(safetyReason, operationLabel);
         if (!canContinue) return;
-        if (preserveConflictWorkspace) {
+        if (preserveWorkspaceCopy) {
           await rememberConflictWorkspaceCopy(saveReason);
         }
         const hydratedResult = await hydrateDocsFromSyncPayload(readiness.syncDocs, docs, {
@@ -2517,7 +4208,11 @@ async function performRemoteShadowPull(readiness, options = {}) {
         workspaceDirty = true;
         await persistWorkspaceBinding();
         await saveData(saveReason);
-        await createShadowRevisionNow(`shadow-${saveReason}`, { silent: true, force: true });
+        const localShadowEntry = await createShadowRevisionNow(`shadow-${saveReason}`, { silent: true, force: true });
+        rememberRemoteRevisionApplication(readiness.revision || readiness.remoteHead, {
+          actionType: remoteRevisionActionType,
+          localRevisionId: localShadowEntry?.revisionId || shadowSyncState?.lastRevisionId || ''
+        });
         renderData();
         updateRemoteShadowUI();
         showToast(`${successPrefix}${buildRemotePullAttachmentMessage(hydratedResult.attachmentSummary)} Revisa-ho i desa el workspace o el backup extern quan et vagi bé.`);
@@ -2525,7 +4220,15 @@ async function performRemoteShadowPull(readiness, options = {}) {
         console.error(err);
         showToast(err?.message || "No s'ha pogut aplicar el remot amb seguretat.", 'error');
       }
-    },
+  };
+  if (skipConfirmation) {
+    await runPullOperation();
+    return true;
+  }
+  openConfirm(
+    confirmationTitle,
+    messageParts.join(''),
+    runPullOperation,
     {
       okLabel,
       warningText,
@@ -2546,7 +4249,9 @@ async function applyRemoteShadowPull() {
     confirmationTitle: 'Aplicar el remot manualment?',
     okLabel: 'Aplicar remot',
     safetyReason: 'before-remote-manual-pull',
+    operationLabel: 'aplicar el remot manualment',
     saveReason: 'remote-manual-pull',
+    remoteRevisionActionType: 'apply',
     successPrefix: 'Remot aplicat localment.'
   });
 }
@@ -2563,11 +4268,61 @@ async function applyGuidedRemoteShadowPull() {
     okLabel: 'Guardar local i aplicar remot',
     warningText: 'Sutsumu crearà una còpia crítica de recuperació i guardarà el local actual a Workspaces recents abans d’aplicar el head remot. No tocarà el teu workspace extern ni el backup extern fins que els desis tu.',
     safetyReason: 'before-remote-guided-pull',
+    operationLabel: 'resoldre la divergència amb el remot',
     saveReason: 'remote-guided-pull',
-    preserveConflictWorkspace: true,
+    preserveWorkspaceCopy: true,
+    remoteRevisionActionType: 'apply',
     requireText: 'REMOT',
     successPrefix: 'Divergència resolta aplicant el remot.'
   });
+}
+
+async function restoreSelectedRemoteHistoryRevision() {
+  const readiness = getRemoteHistoryRevisionRecoveryReadiness();
+  if (!readiness.canRestore) {
+    showToast(readiness.message, ['invalid-remote', 'other-workspace'].includes(readiness.status) ? 'error' : 'info');
+    return false;
+  }
+
+  const selectedShortId = createShadowSyncShortId(readiness.revision?.revisionId || '');
+  const currentHeadShortId = createShadowSyncShortId(readiness.currentRemoteHeadId || '');
+  const remoteDate = readiness.remoteHead?.createdAt
+    ? new Date(readiness.remoteHead.createdAt).toLocaleString('ca-ES')
+    : 'fa un moment';
+  const introText = readiness.isCurrentHead
+    ? `Sutsumu recuperarà el head remot ${selectedShortId} del ${remoteDate} i substituirà l'estat local visible.`
+    : `Sutsumu recuperarà la revisió remota ${selectedShortId} del ${remoteDate}, que és anterior al head remot actual${currentHeadShortId ? ` (${currentHeadShortId})` : ''}, i substituirà l'estat local visible.`;
+
+  return performRemoteShadowPull(readiness, {
+    confirmationTitle: 'Recuperar aquesta revisió remota?',
+    okLabel: 'Recuperar revisió',
+    warningText: 'Sutsumu crearà una còpia crítica de recuperació i guardarà el local actual a Workspaces recents abans de recuperar aquesta revisió remota. No tocarà el teu workspace extern ni el backup extern fins que els desis tu.',
+    safetyReason: 'before-remote-history-restore',
+    operationLabel: 'recuperar aquesta revisió remota',
+    saveReason: 'remote-history-recovery',
+    preserveWorkspaceCopy: true,
+    remoteRevisionActionType: readiness.isCurrentHead ? 'apply' : 'restore',
+    requireText: 'RECUPERAR',
+    successPrefix: 'Revisió remota recuperada localment.',
+    introText
+  });
+}
+
+function downloadSelectedRemoteHistoryRevision() {
+  const revision = getRemoteHistoryRevisionEntry();
+  const bundle = createRemoteHistoryRevisionBundle();
+  if (!revision || !bundle) {
+    showToast('Aquesta revisió remota encara no es pot descarregar com a bundle.', 'info');
+    return false;
+  }
+
+  const workspaceName = revision.workspaceName || revision.payload?.workspace?.name || syncPrepState?.workspace?.name || 'sutsumu';
+  const revisionLabel = createShadowSyncShortId(revision.revisionId || 'remota');
+  const fileName = `${slugifyFileName(workspaceName)}-remote-revision-${slugifyFileName(revisionLabel)}-shadow-bundle.json`;
+  triggerDownload(fileName, JSON.stringify(bundle, null, 2), 'application/json;charset=utf-8');
+  rememberRemoteRevisionDownload(revision, fileName);
+  showToast(`Revisió remota descarregada: ${fileName}`);
+  return true;
 }
 
 async function createRemoteManualPushBundle() {
@@ -2639,7 +4394,18 @@ async function createRemoteManualPushBundle() {
   };
 }
 
-async function pushRemoteShadowManual() {
+async function performRemoteShadowPush(options = {}) {
+  const {
+    confirmationTitle = 'Fer push manual al remot?',
+    okLabel = 'Fer push manual',
+    warningText = "Abans de continuar, Sutsumu crearà una còpia crítica de recuperació i només farà el push si el head remot esperat continua sent el mateix.",
+    successPrefix = 'Push remot completat.',
+    safetyReason = 'before-remote-manual-push',
+    operationLabel = 'fer el push manual al remot',
+    requireText = 'PUSH',
+    createSafetySnapshot = true,
+    skipConfirmation = false
+  } = options;
   const comparison = computeRemoteShadowComparison();
   const readiness = getRemoteShadowPushReadiness(comparison);
   if (!readiness.canPush) {
@@ -2648,16 +4414,42 @@ async function pushRemoteShadowManual() {
   }
 
   const attachmentDocs = getAttachmentDocuments(docs);
+  const attachmentPolicy = readiness.attachmentPolicy || getRemoteAutoPushAttachmentPolicy();
   const attachmentHint = attachmentDocs.length > 0
     ? ` Sutsumu empaquetarà ${attachmentDocs.length} adjunts dins del bundle remot perquè es puguin validar també en un pull segur.`
     : '';
+  const attachmentAutomationHint = attachmentDocs.length > 0 && !attachmentPolicy.canAutoPush
+    ? ` ${attachmentPolicy.message} Això no bloqueja el push manual: només evita fer-lo en segon pla sense revisar-lo.`
+    : '';
+  const messageParts = [
+    `<p>${escapeHtml(comparison?.status === 'no-remote'
+      ? 'Sutsumu crearà el primer head remot amb l’estat local actual i només continuarà si el backend confirma que no hi havia cap head previ inesperat.'
+      : "Sutsumu enviarà el head local actual al backend remot sense sobreescriure'l si detecta que el head remot ha canviat des de l'última comparació.")}</p>`
+  ];
 
-  openConfirm(
-    'Fer push manual al remot?',
-    `Sutsumu enviarà el head local actual al backend remot sense sobreescriure'l si detecta que el head remot ha canviat des de l'última comparació.${attachmentHint}`,
-    async () => {
-      const canContinue = await prepareSafetySnapshotOrAbort('before-remote-manual-push', 'fer el push manual al remot');
-      if (!canContinue) return;
+  if (comparison?.detailText) {
+    messageParts.push(`<p><strong>Comparació actual:</strong> ${escapeHtml(comparison.detailText)}</p>`);
+  }
+  if (readiness?.pushPreview?.summaryText) {
+    messageParts.push(`
+      <div class="confirm-preview-block">
+        <div class="confirm-preview-label">Previsualització del push: ${escapeHtml(readiness.pushPreview.summaryText)}</div>
+        ${buildRemotePullPreviewGroupsHtml(readiness.pushPreview, { entryLimit: 4 })}
+      </div>
+    `.trim());
+  }
+  if (attachmentHint) {
+    messageParts.push(`<p>${escapeHtml(attachmentHint.trim())}</p>`);
+  }
+  if (attachmentAutomationHint) {
+    messageParts.push(`<p>${escapeHtml(attachmentAutomationHint.trim())}</p>`);
+  }
+
+  const runPushOperation = async () => {
+      if (createSafetySnapshot) {
+        const canContinue = await prepareSafetySnapshotOrAbort(safetyReason, operationLabel);
+        if (!canContinue) return false;
+      }
       try {
         const pushBundle = await createRemoteManualPushBundle();
         const response = await fetch(remoteShadowConfig.url, {
@@ -2679,6 +4471,7 @@ async function pushRemoteShadowManual() {
           })
         });
         if (!response.ok) {
+          const errorBody = await readJsonResponseSafely(response);
           if (response.status === 401 || response.status === 403) {
             throw createRemoteShadowConnectionError(`Les credencials remotes no permeten fer push (${response.status}).`, 'auth-error');
           }
@@ -2686,52 +4479,79 @@ async function pushRemoteShadowManual() {
             throw createRemoteShadowConnectionError('La funció remota de push no existeix o no està publicada (404).', 'not-found');
           }
           if (response.status === 409) {
-            throw createRemoteShadowConnectionError("El head remot ha canviat abans del teu push. Torna a comparar abans de reintentar.", 'conflict');
+            const remoteHead = errorBody?.head ? normalizeRemoteProviderHead(errorBody.head, remoteShadowConfig.url, remoteProviderProfile) : null;
+            const remoteHeadLabel = remoteHead?.headRevisionId ? ` (${createShadowSyncShortId(remoteHead.headRevisionId)})` : '';
+            const conflictError = createRemoteShadowConnectionError(`El head remot ha canviat abans del teu push${remoteHeadLabel}. Torna a comparar abans de reintentar.`, 'conflict');
+            conflictError.remoteHead = remoteHead;
+            throw conflictError;
           }
-          throw createRemoteShadowConnectionError(`No s'ha pogut completar el push remot (${response.status}).`, 'error');
+          throw createRemoteShadowConnectionError(errorBody?.error || `No s'ha pogut completar el push remot (${response.status}).`, 'error');
         }
         const parsedResponse = await response.json();
         const descriptor = normalizeRemoteProviderHead(parsedResponse?.head || parsedResponse, remoteShadowConfig.url, remoteProviderProfile);
         writeRemoteShadowSourceSnapshot({
           ...pushBundle.bundle,
           sourceName: descriptor.bundleUrl || remoteShadowConfig.url,
-          importedAt: new Date().toISOString()
+          importedAt: new Date().toISOString(),
+          remoteHead: descriptor,
+          remoteHistoryCount: descriptor.historyCount || 0,
+          recentRevisions: descriptor.recentRevisions || []
         });
-        writeRemoteShadowConfigSnapshot({
+        writeRemoteShadowConfigSnapshot(buildRemoteShadowConfigSnapshot({
           mode: 'provider-head-url',
           url: remoteShadowConfig.url,
           lastStatus: 'connected',
           lastFetchedAt: new Date().toISOString(),
-          lastError: '',
-          autoCheckOnStart: true
-        });
+          lastError: ''
+        }));
         updateRemoteShadowUI();
         const pushAttachmentBits = [];
         if (pushBundle.attachmentSummary.inlineReady > 0) pushAttachmentBits.push(`${pushBundle.attachmentSummary.inlineReady} adjunts empaquetats`);
         if (pushBundle.attachmentSummary.metadataOnly > 0) pushAttachmentBits.push(`${pushBundle.attachmentSummary.metadataOnly} adjunts només en metadades`);
-        showToast(`Push remot completat.${pushAttachmentBits.length ? ` Adjunts: ${pushAttachmentBits.join(' · ')}.` : ''}`);
+        showToast(`${successPrefix}${pushAttachmentBits.length ? ` Adjunts: ${pushAttachmentBits.join(' · ')}.` : ''}`);
+        return true;
       } catch (err) {
+        if (err?.remoteHead) {
+          writeRemoteShadowConfigSnapshot(buildRemoteShadowConfigSnapshot({
+            mode: 'provider-head-url',
+            url: remoteShadowConfig?.url || '',
+            lastStatus: 'conflict',
+            lastFetchedAt: new Date().toISOString(),
+            lastError: err?.message || 'remote-push-conflict'
+          }));
+        }
         if (err?.remoteStatus === 'conflict') {
           await connectRemoteShadowUrl({ silent: true });
         }
-        writeRemoteShadowConfigSnapshot({
+        writeRemoteShadowConfigSnapshot(buildRemoteShadowConfigSnapshot({
           mode: 'provider-head-url',
           url: remoteShadowConfig?.url || '',
           lastStatus: err?.remoteStatus || 'error',
           lastFetchedAt: remoteShadowConfig?.lastFetchedAt || '',
-          lastError: err?.message || 'remote-push-error',
-          autoCheckOnStart: true
-        });
+          lastError: err?.message || 'remote-push-error'
+        }));
         showToast(err?.message || "No s'ha pogut completar el push remot.", 'error');
+        return false;
       }
-    },
+  };
+  if (skipConfirmation) {
+    return runPushOperation();
+  }
+  openConfirm(
+    confirmationTitle,
+    messageParts.join(''),
+    runPushOperation,
     {
-      okLabel: 'Fer push manual',
-      warningText: "Abans de continuar, Sutsumu crearà una còpia crítica de recuperació i només farà el push si el head remot esperat continua sent el mateix.",
-      requireText: 'PUSH'
+      okLabel,
+      warningText,
+      requireText
     }
   );
   return true;
+}
+
+async function pushRemoteShadowManual() {
+  return performRemoteShadowPush();
 }
 
 function updateRemoteShadowUI(options = {}) {
@@ -2739,7 +4559,16 @@ function updateRemoteShadowUI(options = {}) {
   if (!syncRemoteStatusTextEl || !syncRemoteBadgeEl) return;
   updateRemoteProviderModeUI({ forceInputs });
   const comparison = computeRemoteShadowComparison();
+  const localStability = getLocalSyncStabilityState();
   const remoteHead = comparison.remoteHead;
+  const pullReadiness = getRemoteShadowPullReadiness(comparison);
+  const guidedReadiness = getGuidedRemoteShadowPullReadiness(comparison);
+  const pushReadiness = getRemoteShadowPushReadiness(comparison);
+  const attachmentPolicy = pushReadiness.attachmentPolicy || getRemoteAutoPushAttachmentPolicy();
+  const automationConfig = getEffectiveRemoteShadowAutomationConfig();
+  const remoteHistoryState = buildRemoteRevisionInspectorState(remoteShadowSource, comparison);
+  const pullPreview = pullReadiness.pullPreview || guidedReadiness.pullPreview || null;
+  const pushPreview = pushReadiness.pushPreview || null;
   let description = comparison.description;
   let badgeLabel = comparison.label;
   if (remoteShadowConfig?.lastStatus === 'checking') {
@@ -2761,11 +4590,169 @@ function updateRemoteShadowUI(options = {}) {
     badgeLabel = remoteHead ? comparison.label : 'Error remot';
     description = remoteShadowConfig.lastError;
   }
+  if (comparison.status === 'diverged') {
+    description = `No s'ha perdut res: el local i el remot han divergit i Sutsumu espera una decisió segura. ${comparison.detailText || ''}`.trim();
+  } else if (comparison.status === 'other-workspace') {
+    description = 'Aquest remot pertany a un altre workspace. El pots inspeccionar, però Sutsumu no el tocarà automàticament aquí.';
+  }
+  if (pullPreview?.summaryText && (pullReadiness.canApply || guidedReadiness.canGuide)) {
+    description = `${description} Pull previst: ${pullPreview.summaryText}`.trim();
+  } else if (pushPreview?.summaryText && pushReadiness.canPush) {
+    description = `${description} Push previst: ${pushPreview.summaryText}`.trim();
+  }
+  const remoteRevisionLogSummary = describeRemoteRevisionLog();
+  if (remoteRevisionLogSummary && remoteShadowConfig?.lastStatus !== 'checking' && remoteShadowConfig?.lastStatus !== 'auth-error' && remoteShadowConfig?.lastStatus !== 'not-found') {
+    description = `${description} ${remoteRevisionLogSummary}`.trim();
+  }
   syncRemoteBadgeEl.textContent = badgeLabel;
   syncRemoteStatusTextEl.textContent = description;
   if (syncRemoteSourceValueEl) syncRemoteSourceValueEl.textContent = getRemoteShadowSourceLabel();
   if (syncRemoteHeadValueEl) syncRemoteHeadValueEl.textContent = remoteHead ? createShadowSyncShortId(remoteHead.revisionId) : 'pendent';
-  if (syncRemoteCompareValueEl) syncRemoteCompareValueEl.textContent = badgeLabel;
+  if (syncRemoteCompareValueEl) {
+    syncRemoteCompareValueEl.textContent = comparison.compareValue || badgeLabel;
+  }
+  if (syncRemotePullPreviewValueEl) {
+    if (!remoteHead) {
+      syncRemotePullPreviewValueEl.textContent = 'pendent';
+    } else if (comparison.status === 'other-workspace') {
+      syncRemotePullPreviewValueEl.textContent = 'Bloquejat';
+    } else if (pullPreview?.compactValue) {
+      syncRemotePullPreviewValueEl.textContent = pullPreview.compactValue;
+    } else if (pullReadiness.status === 'invalid-remote' || guidedReadiness.status === 'invalid-remote') {
+      syncRemotePullPreviewValueEl.textContent = 'Incompatible';
+    } else {
+      syncRemotePullPreviewValueEl.textContent = 'Sense dades';
+    }
+  }
+  if (syncRemotePullPreviewPanelEl) {
+    const canRenderPreview = Boolean(pullPreview && (pullReadiness.canApply || guidedReadiness.canGuide));
+    syncRemotePullPreviewPanelEl.classList.toggle('hidden', !canRenderPreview);
+    if (canRenderPreview) {
+      if (syncRemotePullPreviewTextEl) {
+        syncRemotePullPreviewTextEl.textContent = buildRemoteChangePreviewLeadText('apliques el remot', pullPreview);
+      }
+      if (syncRemotePullPreviewListEl) {
+        syncRemotePullPreviewListEl.innerHTML = buildRemotePullPreviewGroupsHtml(pullPreview, { entryLimit: 3 });
+      }
+    } else {
+      if (syncRemotePullPreviewTextEl) syncRemotePullPreviewTextEl.textContent = 'Encara no hi ha canvis previstos per mostrar.';
+      if (syncRemotePullPreviewListEl) syncRemotePullPreviewListEl.innerHTML = '';
+    }
+  }
+  if (syncRemotePushPreviewValueEl) {
+    if (!docs.length) {
+      syncRemotePushPreviewValueEl.textContent = 'Sense local';
+    } else if (getSelectedRemoteShadowMode() !== 'provider-head-url' || !remoteShadowConfig?.url) {
+      syncRemotePushPreviewValueEl.textContent = 'Configura backend';
+    } else if (comparison.status === 'other-workspace') {
+      syncRemotePushPreviewValueEl.textContent = 'Bloquejat';
+    } else if (pushReadiness.canPush && pushPreview?.compactValue) {
+      syncRemotePushPreviewValueEl.textContent = pushPreview.compactValue;
+    } else if (pushReadiness.status === 'in-sync') {
+      syncRemotePushPreviewValueEl.textContent = 'Sense canvis';
+    } else if (pushReadiness.status === 'checking') {
+      syncRemotePushPreviewValueEl.textContent = 'Comprovant';
+    } else {
+      syncRemotePushPreviewValueEl.textContent = 'Sense dades';
+    }
+  }
+  if (syncRemotePushPreviewPanelEl) {
+    const canRenderPushPreview = Boolean(pushPreview && pushReadiness.canPush);
+    syncRemotePushPreviewPanelEl.classList.toggle('hidden', !canRenderPushPreview);
+    if (canRenderPushPreview) {
+      if (syncRemotePushPreviewTextEl) {
+        syncRemotePushPreviewTextEl.textContent = buildRemoteChangePreviewLeadText('fas push', pushPreview);
+      }
+      if (syncRemotePushPreviewListEl) {
+        syncRemotePushPreviewListEl.innerHTML = buildRemotePullPreviewGroupsHtml(pushPreview, { entryLimit: 3 });
+      }
+    } else {
+      if (syncRemotePushPreviewTextEl) syncRemotePushPreviewTextEl.textContent = 'Encara no hi ha canvis previstos per mostrar.';
+      if (syncRemotePushPreviewListEl) syncRemotePushPreviewListEl.innerHTML = '';
+    }
+  }
+  if (syncRemoteHistoryValueEl) {
+    if (!remoteHead) {
+      syncRemoteHistoryValueEl.textContent = 'pendent';
+    } else if (remoteHistoryState?.totalCount) {
+      syncRemoteHistoryValueEl.textContent = `${remoteHistoryState.totalCount} rev.`;
+    } else {
+      syncRemoteHistoryValueEl.textContent = 'Sense dades';
+    }
+  }
+  if (syncRemoteHistoryPanelEl) {
+    const canRenderRemoteHistory = Boolean(remoteHistoryState && remoteHistoryState.allCount > 0);
+    syncRemoteHistoryPanelEl.classList.toggle('hidden', !canRenderRemoteHistory);
+    if (canRenderRemoteHistory) {
+      if (syncRemoteHistoryTextEl) {
+        syncRemoteHistoryTextEl.textContent = buildRemoteRevisionHistoryLeadText(remoteHistoryState);
+      }
+      if (syncRemoteHistoryFiltersEl) {
+        Array.from(syncRemoteHistoryFiltersEl.querySelectorAll('[data-remote-history-filter]')).forEach(button => {
+          const normalizedFilter = normalizeRemoteHistoryFilter(button.dataset.remoteHistoryFilter || '');
+          const isActive = normalizedFilter === remoteHistoryState.activeFilter;
+          const baseLabel = button.dataset.baseLabel || button.textContent.trim();
+          button.dataset.baseLabel = baseLabel;
+          const count = Number(remoteHistoryState.filterCounts?.[normalizedFilter] || 0);
+          button.textContent = count > 0 ? `${baseLabel} (${count})` : baseLabel;
+          button.classList.toggle('active', isActive);
+          button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+      }
+      if (syncRemoteHistoryListEl) {
+        syncRemoteHistoryListEl.innerHTML = remoteHistoryState.entries
+          .map(entry => renderRemoteRevisionHistoryEntryHtml(entry, remoteHistoryState.selected?.revisionId || ''))
+          .join('');
+      }
+      if (syncRemoteHistoryDetailEl) {
+        syncRemoteHistoryDetailEl.innerHTML = renderRemoteRevisionDetailHtml(remoteHistoryState);
+      }
+    } else {
+      if (syncRemoteHistoryTextEl) syncRemoteHistoryTextEl.textContent = 'Encara no hi ha historial remot per inspeccionar.';
+      if (syncRemoteHistoryFiltersEl) {
+        Array.from(syncRemoteHistoryFiltersEl.querySelectorAll('[data-remote-history-filter]')).forEach(button => {
+          const baseLabel = button.dataset.baseLabel || button.textContent.trim();
+          button.dataset.baseLabel = baseLabel;
+          button.textContent = baseLabel;
+          const isActive = normalizeRemoteHistoryFilter(button.dataset.remoteHistoryFilter || '') === 'all';
+          button.classList.toggle('active', isActive);
+          button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+      }
+      if (syncRemoteHistoryListEl) syncRemoteHistoryListEl.innerHTML = '';
+      if (syncRemoteHistoryDetailEl) syncRemoteHistoryDetailEl.innerHTML = '<p class="sync-prep-text">Selecciona una revisió remota per veure\'n el context.</p>';
+    }
+  }
+  if (syncRemoteAutomationTextEl) {
+    syncRemoteAutomationTextEl.textContent = buildRemoteAutomationStatusText(comparison, localStability, attachmentPolicy, automationConfig);
+  }
+  if (remoteAutoCheckOnStartInput && (forceInputs || document.activeElement !== remoteAutoCheckOnStartInput)) {
+    remoteAutoCheckOnStartInput.checked = automationConfig.autoCheckOnStart;
+  }
+  if (remoteAutoPullWhenCleanInput && (forceInputs || document.activeElement !== remoteAutoPullWhenCleanInput)) {
+    remoteAutoPullWhenCleanInput.checked = automationConfig.autoPullWhenClean;
+  }
+  if (remoteAutoPushWhenStableInput && (forceInputs || document.activeElement !== remoteAutoPushWhenStableInput)) {
+    remoteAutoPushWhenStableInput.checked = automationConfig.autoPushWhenStable;
+  }
+  if (syncRemoteConflictPanelEl) {
+    const conflictGuidance = buildRemoteConflictGuidance(comparison, localStability, attachmentPolicy);
+    const shouldShowConflictPanel = Boolean(
+      conflictGuidance.items.length
+      || comparison.status === 'diverged'
+      || comparison.status === 'other-workspace'
+      || remoteShadowConfig?.lastStatus === 'conflict'
+    );
+    syncRemoteConflictPanelEl.classList.toggle('hidden', !shouldShowConflictPanel);
+    if (syncRemoteConflictTextEl) {
+      syncRemoteConflictTextEl.textContent = conflictGuidance.text;
+    }
+    if (syncRemoteConflictListEl) {
+      syncRemoteConflictListEl.innerHTML = conflictGuidance.items
+        .map(item => `<li>${escapeHtml(item)}</li>`)
+        .join('');
+    }
+  }
   if (syncRemoteImportedValueEl) {
     syncRemoteImportedValueEl.textContent = formatShadowSyncMoment(remoteShadowConfig?.lastFetchedAt || remoteShadowSource?.importedAt || '');
   }
@@ -2773,18 +4760,15 @@ function updateRemoteShadowUI(options = {}) {
     remoteShadowUrlInput.value = remoteShadowDraftUrl || '';
   }
   if (applyRemoteShadowPullBtn) {
-    const pullReadiness = getRemoteShadowPullReadiness(comparison);
     applyRemoteShadowPullBtn.disabled = !pullReadiness.canApply;
     applyRemoteShadowPullBtn.textContent = comparison.status === 'remote-only' ? 'Importar remot' : 'Aplicar remot';
     applyRemoteShadowPullBtn.title = pullReadiness.canApply ? '' : pullReadiness.message;
   }
   if (guidedRemotePullBtn) {
-    const guidedReadiness = getGuidedRemoteShadowPullReadiness(comparison);
     guidedRemotePullBtn.disabled = !guidedReadiness.canGuide;
     guidedRemotePullBtn.title = guidedReadiness.canGuide ? '' : guidedReadiness.message;
   }
   if (pushRemoteShadowBtn) {
-    const pushReadiness = getRemoteShadowPushReadiness(comparison);
     pushRemoteShadowBtn.disabled = !pushReadiness.canPush;
     pushRemoteShadowBtn.title = pushReadiness.canPush ? '' : pushReadiness.message;
   }
@@ -2810,9 +4794,9 @@ async function importRemoteShadowBundleFile(file) {
     const comparison = computeRemoteShadowComparison();
     showToast(`Bundle remot importat: ${normalized?.sourceName || file.name}`);
     if (comparison.status === 'remote-ahead') {
-      showToast('He detectat un head remot més nou. Encara no faré cap pull automàtic en aquesta fase.', 'info');
+      showToast(comparison.detailText || 'He detectat un head remot més nou. Aquest bundle només s’inspecciona manualment: no s’aplicarà sol.', 'info');
     } else if (comparison.status === 'diverged') {
-      showToast('Hi ha divergència entre local i remot. Pots usar "Resoldre divergència" per guardar el local i aplicar el remot amb xarxa de seguretat.', 'info');
+      showToast(comparison.detailText || 'Hi ha divergència entre local i remot. Pots usar "Resoldre divergència" per guardar el local i aplicar el remot amb xarxa de seguretat.', 'info');
     }
     return true;
   } catch (err) {
@@ -2834,6 +4818,9 @@ function promptRemoteShadowImport() {
 function clearRemoteShadowSource() {
   if (!remoteShadowSource && !remoteShadowConfig) return;
   const label = remoteShadowConfig?.url || remoteShadowSource?.sourceName || 'remot';
+  if (remoteAutoSyncTimer) clearTimeout(remoteAutoSyncTimer);
+  remoteAutoSyncTimer = null;
+  lastRemoteAutoSyncKey = '';
   writeRemoteShadowSourceSnapshot(null);
   writeRemoteShadowConfigSnapshot(null);
   remoteShadowDraftUrl = '';
@@ -7925,6 +9912,8 @@ async function applyPendingAppUpdate() {
   shadowSyncState = await readShadowSyncState();
   remoteShadowSource = readRemoteShadowSourceSnapshot();
   remoteShadowConfig = readRemoteShadowConfigSnapshot();
+  remoteRevisionDownloads = readRemoteRevisionDownloadRegistry();
+  remoteRevisionApplications = readRemoteRevisionApplicationRegistry();
   remoteShadowDraftUrl = remoteShadowConfig?.url || '';
   remoteProviderProfile = readRemoteProviderProfileSnapshot();
   remoteProviderSecret = readRemoteProviderSecretSnapshot(remoteProviderProfile);
@@ -8135,6 +10124,66 @@ async function applyPendingAppUpdate() {
   guidedRemotePullBtn?.addEventListener('click', applyGuidedRemoteShadowPull);
   applyRemoteShadowPullBtn?.addEventListener('click', applyRemoteShadowPull);
   pushRemoteShadowBtn?.addEventListener('click', pushRemoteShadowManual);
+  syncRemoteHistoryFiltersEl?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-remote-history-filter]');
+    if (!button) return;
+    const nextFilter = normalizeRemoteHistoryFilter(button.dataset.remoteHistoryFilter || '');
+    if (nextFilter === activeRemoteHistoryFilter) return;
+    activeRemoteHistoryFilter = nextFilter;
+    updateRemoteShadowUI();
+  });
+  remoteAutoCheckOnStartInput?.addEventListener('change', () => {
+    setRemoteShadowAutomationDraft({
+      autoCheckOnStart: remoteAutoCheckOnStartInput.checked
+    }, {
+      persist: true,
+      recheckAutomation: false
+    });
+  });
+  remoteAutoPullWhenCleanInput?.addEventListener('change', () => {
+    setRemoteShadowAutomationDraft({
+      autoPullWhenClean: remoteAutoPullWhenCleanInput.checked
+    }, {
+      persist: true,
+      recheckAutomation: true
+    });
+  });
+  remoteAutoPushWhenStableInput?.addEventListener('change', () => {
+    setRemoteShadowAutomationDraft({
+      autoPushWhenStable: remoteAutoPushWhenStableInput.checked
+    }, {
+      persist: true,
+      recheckAutomation: true
+    });
+  });
+  syncRemoteHistoryListEl?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-remote-history-id]');
+    if (!button) return;
+    const nextRevisionId = String(button.dataset.remoteHistoryId || '').trim();
+    if (!nextRevisionId || nextRevisionId === selectedRemoteHistoryRevisionId) return;
+    selectedRemoteHistoryRevisionId = nextRevisionId;
+    updateRemoteShadowUI();
+  });
+  syncRemoteHistoryDetailEl?.addEventListener('click', (event) => {
+    const restoreButton = event.target.closest('[data-remote-history-restore-id]');
+    const downloadButton = event.target.closest('[data-remote-history-download-id]');
+    const actionButton = restoreButton || downloadButton;
+    if (!actionButton) return;
+    const revisionId = String(
+      restoreButton?.dataset.remoteHistoryRestoreId
+      || downloadButton?.dataset.remoteHistoryDownloadId
+      || ''
+    ).trim();
+    if (revisionId && revisionId !== selectedRemoteHistoryRevisionId) {
+      selectedRemoteHistoryRevisionId = revisionId;
+      updateRemoteShadowUI();
+    }
+    if (downloadButton) {
+      downloadSelectedRemoteHistoryRevision();
+      return;
+    }
+    restoreSelectedRemoteHistoryRevision();
+  });
   clearRemoteShadowBtn?.addEventListener('click', clearRemoteShadowSource);
   recheckRemoteShadowBtn?.addEventListener('click', () => {
     if (remoteShadowConfig?.url) {
@@ -8493,6 +10542,7 @@ async function applyPendingAppUpdate() {
   async function saveData(reason = 'auto-save') {
     docs = normalizeDocs(docs);
     expandedFolders = normalizeExpandedFolders(expandedFolders, docs);
+    const guardedRemoteImportReasons = ['remote-manual-pull', 'remote-guided-pull', 'remote-history-recovery', 'remote-auto-pull'];
 
     if (getMainStore()) {
       try {
@@ -8521,10 +10571,10 @@ async function applyPendingAppUpdate() {
     queueSurvivalAttachmentMirrorSync();
     updateTargetSelects();
     queueAutomaticFullBackup(reason);
-    if (!['remote-manual-pull', 'remote-guided-pull'].includes(reason)) {
+    if (!guardedRemoteImportReasons.includes(reason)) {
       queueExternalBackupAutosave(reason);
     }
-    if (reason !== 'workspace-open' && !['remote-manual-pull', 'remote-guided-pull'].includes(reason)) {
+    if (reason !== 'workspace-open' && !guardedRemoteImportReasons.includes(reason)) {
       queueWorkspaceAutosave(reason);
     }
     updateBackupStatusUI();

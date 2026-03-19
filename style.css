@@ -28,6 +28,7 @@
 
   /* Arbre de carpetes visual config */
   --tree-indent: 32px;
+  --sticky-safe-offset: 124px;
 }
 
 * {
@@ -137,7 +138,15 @@ body {
 
 .column-left {
   position: sticky;
-  top: 100px;
+  top: var(--sticky-safe-offset);
+}
+
+button,
+input,
+select,
+textarea,
+[contenteditable="true"] {
+  scroll-margin-top: calc(var(--sticky-safe-offset) + 12px);
 }
 
 /* --- Cards --- */
@@ -741,6 +750,14 @@ ul.doc-list {
   font-size: 14px;
   color: var(--color-text-muted);
   line-height: 1.5;
+}
+
+.modal-text p {
+  margin: 0 0 12px;
+}
+
+.modal-text p:last-child {
+  margin-bottom: 0;
 }
 
 .modal-actions {
@@ -2029,6 +2046,288 @@ ul.doc-list {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px dashed rgba(15, 23, 42, 0.12);
+}
+
+.sync-remote-preview-panel {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.sync-remote-automation-card {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(14, 165, 233, 0.12);
+}
+
+.sync-remote-toggle-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.sync-remote-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.sync-remote-toggle input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.sync-remote-preview-groups {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.sync-remote-preview-group {
+  display: grid;
+  gap: 8px;
+}
+
+.sync-remote-preview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.sync-remote-preview-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.sync-remote-preview-item.is-add {
+  border-left: 4px solid #16a34a;
+}
+
+.sync-remote-preview-item.is-update {
+  border-left: 4px solid #0284c7;
+}
+
+.sync-remote-preview-item.is-remove {
+  border-left: 4px solid #dc2626;
+}
+
+.sync-remote-preview-item strong {
+  display: block;
+  color: var(--color-text-main);
+  font-size: 0.92rem;
+}
+
+.sync-remote-preview-item small {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.sync-remote-preview-more {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.confirm-preview-block {
+  display: grid;
+  gap: 10px;
+}
+
+.confirm-preview-label {
+  font-weight: 700;
+  color: var(--color-text-main);
+}
+
+.sync-remote-history-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+  margin-top: 12px;
+  align-items: start;
+}
+
+.sync-remote-history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sync-remote-history-filters .btn.active {
+  background: rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.28);
+  color: #0c4a6e;
+}
+
+.sync-remote-history-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sync-remote-history-entry {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.94);
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.sync-remote-history-entry:hover {
+  border-color: rgba(14, 165, 233, 0.3);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.sync-remote-history-entry.is-selected {
+  border-color: rgba(2, 132, 199, 0.42);
+  box-shadow: 0 14px 28px rgba(2, 132, 199, 0.12);
+}
+
+.sync-remote-history-entry-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sync-remote-history-entry-main strong {
+  font-size: 0.92rem;
+  color: var(--color-text-main);
+}
+
+.sync-remote-history-entry-date {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  text-align: right;
+}
+
+.sync-remote-history-entry-meta {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.sync-remote-history-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sync-remote-history-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(226, 232, 240, 0.88);
+  color: #334155;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.sync-remote-history-badge.is-head {
+  background: rgba(186, 230, 253, 0.9);
+  color: #0c4a6e;
+}
+
+.sync-remote-history-badge.is-local {
+  background: rgba(220, 252, 231, 0.9);
+  color: #166534;
+}
+
+.sync-remote-history-badge.is-downloaded {
+  background: rgba(204, 251, 241, 0.92);
+  color: #115e59;
+}
+
+.sync-remote-history-badge.is-applied {
+  background: rgba(224, 231, 255, 0.94);
+  color: #3730a3;
+}
+
+.sync-remote-history-badge.is-base {
+  background: rgba(254, 240, 138, 0.92);
+  color: #854d0e;
+}
+
+.sync-remote-history-badge.is-conflict {
+  background: rgba(254, 226, 226, 0.9);
+  color: #991b1b;
+}
+
+.sync-remote-history-detail {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  min-width: 0;
+}
+
+.sync-remote-history-recovery {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.sync-remote-history-actions {
+  margin-top: 0;
+}
+
+.sync-remote-history-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.sync-remote-history-detail-item {
+  display: grid;
+  gap: 4px;
+}
+
+.sync-remote-history-detail-item span {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.sync-remote-history-detail-item strong {
+  font-size: 0.88rem;
+  color: var(--color-text-main);
+  word-break: break-word;
+}
+
+.sync-remote-conflict-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: #475569;
+  font-size: 0.88rem;
+  line-height: 1.5;
 }
 
 .sync-remote-url-row {

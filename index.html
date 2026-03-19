@@ -379,12 +379,72 @@
                         <strong id="syncRemoteCompareValue" class="sync-prep-stat-value">Sense remot</strong>
                       </div>
                       <div class="sync-prep-stat-card">
+                        <span class="sync-prep-stat-label">Pull previst</span>
+                        <strong id="syncRemotePullPreviewValue" class="sync-prep-stat-value">pendent</strong>
+                      </div>
+                      <div class="sync-prep-stat-card">
+                        <span class="sync-prep-stat-label">Push previst</span>
+                        <strong id="syncRemotePushPreviewValue" class="sync-prep-stat-value">pendent</strong>
+                      </div>
+                      <div class="sync-prep-stat-card">
+                        <span class="sync-prep-stat-label">Historial remot</span>
+                        <strong id="syncRemoteHistoryValue" class="sync-prep-stat-value">pendent</strong>
+                      </div>
+                      <div class="sync-prep-stat-card">
                         <span class="sync-prep-stat-label">Importat</span>
                         <strong id="syncRemoteImportedValue" class="sync-prep-stat-value">encara no</strong>
                       </div>
                     </div>
+                    <div id="syncRemotePullPreviewPanel" class="sync-remote-preview-panel hidden">
+                      <div class="sync-prep-list-label">Canvis previstos si apliques el remot</div>
+                      <p id="syncRemotePullPreviewText" class="sync-prep-text">Encara no hi ha canvis previstos per mostrar.</p>
+                      <div id="syncRemotePullPreviewList" class="sync-remote-preview-groups"></div>
+                    </div>
+                    <div id="syncRemotePushPreviewPanel" class="sync-remote-preview-panel hidden">
+                      <div class="sync-prep-list-label">Canvis previstos si envies el local</div>
+                      <p id="syncRemotePushPreviewText" class="sync-prep-text">Encara no hi ha canvis previstos per mostrar.</p>
+                      <div id="syncRemotePushPreviewList" class="sync-remote-preview-groups"></div>
+                    </div>
+                    <div id="syncRemoteHistoryPanel" class="sync-remote-preview-panel hidden">
+                      <div class="sync-prep-list-label">Revisions remotes recents</div>
+                      <p id="syncRemoteHistoryText" class="sync-prep-text">Encara no hi ha historial remot per inspeccionar.</p>
+                      <div id="syncRemoteHistoryFilters" class="sync-remote-history-filters">
+                        <button type="button" class="btn btn-secondary btn-small active" data-remote-history-filter="all">Totes</button>
+                        <button type="button" class="btn btn-secondary btn-small" data-remote-history-filter="pending">Pendents</button>
+                        <button type="button" class="btn btn-secondary btn-small" data-remote-history-filter="downloaded">Descarregades</button>
+                        <button type="button" class="btn btn-secondary btn-small" data-remote-history-filter="applied">Aplicades</button>
+                        <button type="button" class="btn btn-secondary btn-small" data-remote-history-filter="restored">Recuperades</button>
+                      </div>
+                      <div class="sync-remote-history-layout">
+                        <div id="syncRemoteHistoryList" class="sync-remote-history-list"></div>
+                        <div id="syncRemoteHistoryDetail" class="sync-remote-history-detail"></div>
+                      </div>
+                    </div>
+                    <div class="sync-remote-automation-card">
+                      <div class="sync-prep-list-label">Automatismes segurs</div>
+                      <p id="syncRemoteAutomationText" class="sync-prep-text">Sutsumu pot revisar, aplicar o enviar canvis automàticament només quan la situació sigui segura.</p>
+                      <div class="sync-remote-toggle-list">
+                        <label class="sync-remote-toggle">
+                          <input id="remoteAutoCheckOnStart" type="checkbox" checked />
+                          <span>Tornar a comprovar el remot en obrir</span>
+                        </label>
+                        <label class="sync-remote-toggle">
+                          <input id="remoteAutoPullWhenClean" type="checkbox" />
+                          <span>Aplicar el remot automàticament si el local està net</span>
+                        </label>
+                        <label class="sync-remote-toggle">
+                          <input id="remoteAutoPushWhenStable" type="checkbox" />
+                          <span>Fer push automàtic quan el local estigui estable</span>
+                        </label>
+                      </div>
+                    </div>
+                    <div id="syncRemoteConflictPanel" class="sync-remote-preview-panel hidden">
+                      <div class="sync-prep-list-label">Si hi ha conflicte o dubte</div>
+                      <p id="syncRemoteConflictText" class="sync-prep-text">Sutsumu t'explicarà què està passant i et donarà una sortida segura abans de tocar res.</p>
+                      <ul id="syncRemoteConflictList" class="sync-remote-conflict-list"></ul>
+                    </div>
                     <div class="sync-shadow-hint">
-                      Aquesta fase només llegeix i compara un head remot. Encara no aplicarà canvis a cegues sobre l'app local.
+                      Aquesta fase manté separat el que és <strong>local</strong> del que és <strong>núvol</strong>. Els automatismes només actuen quan no hi ha risc de perdre canvis i sempre deixen rastre visible.
                     </div>
                     <div class="sync-remote-url-row">
                       <select id="remoteShadowMode" class="custom-select">
@@ -635,7 +695,7 @@
         </svg>
       </div>
       <h3 id="confirmTitle" class="modal-title">Confirmació</h3>
-      <p id="confirmMessage" class="modal-text">N'esteu segurs?</p>
+      <div id="confirmMessage" class="modal-text">N'esteu segurs?</div>
       <div id="confirmWarningBox" class="confirm-warning hidden"></div>
       <div id="confirmTypedWrap" class="confirm-typed hidden">
         <label class="form-label" for="confirmTypedInput">Per confirmar, escriu exactament: <strong id="confirmTypedLabel"></strong></label>
