@@ -2531,6 +2531,9 @@ async function connectRemoteShadowUrl(options = {}) {
     return true;
   } catch (err) {
     console.warn("No s'ha pogut connectar la URL remota de shadow sync.", err);
+    if (err?.remoteStatus === 'empty') {
+      writeRemoteShadowSourceSnapshot(null);
+    }
     writeRemoteShadowConfigSnapshot(buildRemoteShadowConfigSnapshot({
       mode,
       url: effectiveUrl,

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'sutsumu-v1-0-0-cache-3';
+const CACHE_VERSION = 'sutsumu-v1-0-0-cache-4';
 const CORE_ASSETS = [
   './',
   './index.html',
