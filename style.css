@@ -29,6 +29,12 @@
   /* Arbre de carpetes visual config */
   --tree-indent: 32px;
   --sticky-safe-offset: 124px;
+
+  /* iPhone safe areas (notch + home bar) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 * {
@@ -52,6 +58,9 @@ body {
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.3);
   padding: 16px 24px;
+  padding-top: calc(16px + var(--safe-top));
+  padding-left: calc(24px + var(--safe-left));
+  padding-right: calc(24px + var(--safe-right));
   position: sticky;
   top: 0;
   z-index: 40;
@@ -120,7 +129,9 @@ body {
 .container {
   max-width: 1024px;
   margin: 32px auto;
-  padding: 0 24px;
+  padding: 0 calc(24px + var(--safe-left));
+  padding-right: calc(24px + var(--safe-right));
+  padding-bottom: calc(32px + var(--safe-bottom));
 }
 
 .layout {
@@ -686,7 +697,8 @@ ul.doc-list {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  /* safe area padding per iPhone notch i home bar */
+  padding: calc(20px + var(--safe-top)) calc(20px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(20px + var(--safe-left));
   opacity: 1;
   visibility: visible;
   transition: all var(--transition-normal);
@@ -702,7 +714,7 @@ ul.doc-list {
   background: #fff;
   width: 100%;
   max-width: 400px;
-  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px - var(--safe-top) - var(--safe-bottom));
   border-radius: var(--radius-lg);
   padding: 28px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
@@ -710,6 +722,7 @@ ul.doc-list {
   transition: transform var(--transition-normal);
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-box.modal-large {
@@ -791,8 +804,8 @@ ul.doc-list {
 /* --- Toasts Notificacions --- */
 .toast-container {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: calc(24px + var(--safe-bottom));
+  right: calc(24px + var(--safe-right));
   z-index: 200;
   display: flex;
   flex-direction: column;
@@ -1023,9 +1036,78 @@ ul.doc-list {
   }
 
   .toast-container {
-    bottom: 16px;
-    left: 16px;
-    right: 16px;
+    bottom: calc(16px + var(--safe-bottom));
+    left: calc(16px + var(--safe-left));
+    right: calc(16px + var(--safe-right));
+  }
+}
+
+/* --- iPhone / Mobile específic --- */
+@media (max-width: 480px) {
+  /* Botons principals: alçada mínima táctil recomanada Apple = 44px */
+  .btn {
+    min-height: 44px;
+  }
+
+  .btn-small {
+    min-height: 36px;
+  }
+
+  /* Inputs: alçada mínima tactil */
+  input[type="text"],
+  .custom-select,
+  .custom-textarea {
+    min-height: 44px;
+    font-size: 16px; /* Evita zoom automàtic iOS en focus */
+  }
+
+  /* Tabs del formulari: més fàcils de tocar */
+  .tab-btn {
+    padding: 16px 0;
+    min-height: 44px;
+  }
+
+  /* Botons d'acció a la llista: àrea tàctil suficient */
+  .btn-small-danger,
+  .btn-small-action {
+    min-height: 36px;
+    padding: 8px 12px;
+  }
+
+  /* Editor en mòbil: menys alçada mínima */
+  .editor-shell {
+    min-height: 200px;
+  }
+
+  .custom-richtext {
+    font-size: 16px; /* Evita zoom automàtic iOS */
+    max-height: 40vh;
+  }
+
+  /* Editor toolbar: botons tàctils prou grans */
+  .toolbar-btn {
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+
+  /* Modal accions: en columna en pantalles molt estretes */
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+  }
+
+  /* Container: padding reduït */
+  .container {
+    margin: 16px auto;
+  }
+
+  /* Topbar: compacte en mòbil */
+  .topbar {
+    padding: calc(12px + var(--safe-top)) calc(16px + var(--safe-right)) 12px calc(16px + var(--safe-left));
   }
 }
 
@@ -1120,7 +1202,8 @@ ul.doc-list {
 .editor-shell {
   display: flex;
   flex-direction: column;
-  min-height: 420px;
+  min-height: 300px;
+  /* Reduït de 420px → 300px per iPhone petits (SE, etc.) */
   max-height: min(68vh, 820px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
