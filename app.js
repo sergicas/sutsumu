@@ -2169,7 +2169,11 @@ function buildRemoteProviderAuthHeaders(profile = remoteProviderProfile, secret 
     };
   }
   if (normalized.preset === 'supabase-function') {
-    return { 'x-sutsumu-key': trimmedSecret };
+    return {
+      'apikey': normalized.publicKey,
+      'Authorization': `Bearer ${normalized.publicKey}`,
+      'x-sutsumu-key': trimmedSecret
+    };
   }
   return {};
 }
@@ -2256,7 +2260,7 @@ function updateRemoteProviderModeUI(options = {}) {
     remoteProviderRememberSecretInput.checked = profile.rememberSecret === true;
   }
   const showHeaderName = effectivePreset === 'header';
-  const showPublicKey = effectivePreset === 'supabase';
+  const showPublicKey = effectivePreset === 'supabase' || effectivePreset === 'supabase-function';
   const showSupabaseRestBuilder = effectivePreset === 'supabase';
   const showSupabaseFunctionBuilder = effectivePreset === 'supabase-function';
   const showSecret = effectivePreset === 'bearer' || effectivePreset === 'header' || effectivePreset === 'supabase' || effectivePreset === 'supabase-function';
