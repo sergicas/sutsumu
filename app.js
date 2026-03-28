@@ -273,7 +273,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const moveSaveBtn = document.getElementById('moveSaveBtn');
 
   // Constants i Estat de l'aplicació
-  const APP_VERSION = '1.0.0';
+  const APP_VERSION = '1.1.0';
   const APP_RELEASE_LABEL = 'estable';
   const STORAGE_KEY = 'bento_simple_docs';
   const EXPANDED_KEY = 'bento_expanded_folders';
