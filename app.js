@@ -1437,8 +1437,8 @@ function readRemoteShadowSourceSnapshot() {
 function normalizeRemoteShadowAutomationDraft(rawDraft) {
   return {
     autoCheckOnStart: rawDraft?.autoCheckOnStart !== false,
-    autoPullWhenClean: rawDraft?.autoPullWhenClean === true,
-    autoPushWhenStable: rawDraft?.autoPushWhenStable === true
+    autoPullWhenClean: rawDraft?.autoPullWhenClean !== false, // Activat per defecte v1.1
+    autoPushWhenStable: rawDraft?.autoPushWhenStable !== false // Activat per defecte v1.1
   };
 }
 
@@ -3386,6 +3386,12 @@ async function runRemoteShadowAutomation(reason = 'update') {
   const config = getEffectiveRemoteShadowAutomationConfig();
   if (!remoteShadowConfig?.url || remoteShadowConfig?.lastStatus === 'checking') return false;
 
+  // Si és un resum o inici, primer refresquem el head remot per saber si hi ha canvis
+  if ((reason === 'resume' || reason === 'bootstrap') && config.autoCheckOnStart) {
+    const connected = await connectRemoteShadowUrl({ silent: true });
+    if (!connected) return false;
+  }
+
   const comparison = computeRemoteShadowComparison();
   const localState = getLocalSyncStabilityState();
   const attachmentPolicy = getRemoteAutoPushAttachmentPolicy();
@@ -4479,7 +4485,8 @@ async function performRemoteShadowPush(options = {}) {
         if (!response.ok) {
           const errorBody = await readJsonResponseSafely(response);
           if (response.status === 401 || response.status === 403) {
-            throw createRemoteShadowConnectionError(`Les credencials remotes no permeten fer push (${response.status}).`, 'auth-error');
+            const errorDetails = errorBody?.error ? ` (${errorBody.error})` : '';
+            throw createRemoteShadowConnectionError(`Les credencials remotes no permeten fer push${errorDetails}. Revisa Token o Regles de Seguretat.`, 'auth-error');
           }
           if (response.status === 404) {
             throw createRemoteShadowConnectionError('La funció remota de push no existeix o no està publicada (404).', 'not-found');
@@ -10263,6 +10270,13 @@ async function applyPendingAppUpdate() {
     showToast('Ara mateix Sutsumu està fora de línia. Continuaràs treballant amb la memòria local disponible.', 'info');
   });
 
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      // Reprendre automatismes quan la pestanya o l'app mòbil torna al primer pla
+      queueRemoteShadowAutomation('resume', { immediate: false });
+    }
+  });
+
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
     deferredInstallPrompt = event;
@@ -10589,6 +10603,8 @@ async function applyPendingAppUpdate() {
     updateWorkspaceUI();
     queueSyncPreparationRefresh(reason);
     queueShadowSyncRevision(reason);
+    // Llançar l'automatisme de sync (push) quan l'estat local canvii
+    queueRemoteShadowAutomation(reason, { immediate: false });
   }
 
   // Togglers expansibles
