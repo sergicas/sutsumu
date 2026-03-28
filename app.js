@@ -2171,7 +2171,6 @@ function buildRemoteProviderAuthHeaders(profile = remoteProviderProfile, secret 
   if (normalized.preset === 'supabase-function') {
     return {
       'apikey': normalized.publicKey,
-      'Authorization': `Bearer ${normalized.publicKey}`,
       'x-sutsumu-key': trimmedSecret
     };
   }
