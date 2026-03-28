@@ -2504,10 +2504,17 @@ ul.doc-list {
   .sync-remote-connector-row,
   .sync-remote-provider-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
+    align-items: stretch;
   }
 
   .sync-remote-connector-actions {
     width: 100%;
+    margin-top: 4px;
+  }
+
+  .sync-remote-connector-actions .btn {
+    flex: 1;
   }
 }
 
