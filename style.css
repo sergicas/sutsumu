@@ -2437,10 +2437,10 @@ ul.doc-list {
 }
 
 .sync-remote-connector-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: end;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
 }
 
 .sync-remote-connector-actions {
@@ -2450,9 +2450,9 @@ ul.doc-list {
 }
 
 .sync-remote-provider-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   margin-top: 12px;
 }
 
@@ -2501,7 +2501,6 @@ ul.doc-list {
     flex-direction: column;
   }
 
-  .sync-remote-connector-row,
   .sync-remote-provider-grid {
     grid-template-columns: 1fr;
     gap: 16px;
