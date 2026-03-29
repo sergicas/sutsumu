@@ -2444,7 +2444,7 @@ async function fetchRemoteShadowBundleFromProviderHead(url, providerProfile = re
       bundle: remoteShadowSource
     };
   }
-  const bundle = await fetchRemoteShadowBundleFromUrl(parsedHead.bundleUrl, authHeaders);
+  const bundle = await fetchRemoteShadowBundleFromUrl(parsedHead.bundleUrl);
   return {
     descriptor: parsedHead,
     bundle
