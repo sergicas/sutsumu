@@ -33,8 +33,15 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 function readProvidedSharedKey(req: Request) {
+  const url = new URL(req.url);
+  const queryKey = url.searchParams.get("sutsumu_key") 
+    || url.searchParams.get("key") 
+    || url.searchParams.get("shared_key");
+  if (queryKey) return queryKey.trim();
+
   const headerKey = req.headers.get("x-sutsumu-key")?.trim();
   if (headerKey) return headerKey;
+
   const authHeader = req.headers.get("authorization") || "";
   if (/^bearer\s+/i.test(authHeader)) {
     return authHeader.replace(/^bearer\s+/i, "").trim();

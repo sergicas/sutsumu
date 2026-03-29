@@ -2149,6 +2149,13 @@ function buildSupabaseFunctionHeadUrl(profile = getDraftRemoteProviderProfile())
   baseUrl.search = '';
   baseUrl.hash = '';
   baseUrl.searchParams.set('workspace_id', normalized.workspaceId);
+  if (normalized.preset === 'supabase-function' && normalized.publicKey) {
+    baseUrl.searchParams.set('apikey', normalized.publicKey);
+  }
+  const trimmedSecret = typeof remoteProviderSecret === 'string' ? remoteProviderSecret.trim() : '';
+  if (normalized.preset === 'supabase-function' && trimmedSecret) {
+    baseUrl.searchParams.set('sutsumu_key', trimmedSecret);
+  }
   return baseUrl.toString();
 }
 
@@ -2169,10 +2176,8 @@ function buildRemoteProviderAuthHeaders(profile = remoteProviderProfile, secret 
     };
   }
   if (normalized.preset === 'supabase-function') {
-    return {
-      'apikey': normalized.publicKey,
-      'x-sutsumu-key': trimmedSecret
-    };
+    // Els paràmetres ara s'envien via Query String per evitar preflight a iOS Safari
+    return {};
   }
   return {};
 }
