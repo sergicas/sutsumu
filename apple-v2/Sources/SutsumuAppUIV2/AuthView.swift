@@ -11,7 +11,18 @@ struct AuthView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if !appState.statusMessage.isEmpty {
-                    sutsumuStatusBanner(appState.statusMessage, tint: bentoRed, icon: "exclamationmark.circle.fill")
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundStyle(bentoRed)
+                        Text(appState.statusMessage)
+                            .font(.footnote)
+                            .foregroundStyle(Color(red: 0.17, green: 0.12, blue: 0.06))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(bentoRed.opacity(0.09), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(bentoRed.opacity(0.25), lineWidth: 0.5))
                 }
                 welcomeHeroCard
                 welcomeAccessCard
@@ -26,64 +37,64 @@ struct AuthView: View {
     }
 
     private var welcomeHeroCard: some View {
-        sutsumuSurfacePanel(tint: bentoPrimary) {
-            VStack(alignment: .leading, spacing: 24) {
-                HStack(alignment: .center, spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [bentoPrimary, bentoBlue],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .center, spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.88, green: 0.55, blue: 0.06),
+                                    Color(red: 0.56, green: 0.26, blue: 0.03)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
                             )
-                            .frame(width: 56, height: 56)
-                            .shadow(color: bentoBlue.opacity(0.20), radius: 10, x: 0, y: 6)
-                        Image(systemName: "tray.2.fill")
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Sutsumu")
-                            .font(.system(.title3, design: .serif).weight(.bold))
-                            .foregroundStyle(sutsumuInk)
-                        Text("El teu espai personal, llest per reprendre a l’iPhone i al Mac.")
-                            .font(.caption)
-                            .foregroundStyle(sutsumuMutedText)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    statChip("Preparat", tint: bentoPrimary)
+                        )
+                        .frame(width: 52, height: 52)
+                        .shadow(color: Color(red: 0.56, green: 0.26, blue: 0.03).opacity(0.35), radius: 6, x: 0, y: 3)
+                    Image(systemName: "tray.2.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Continua exactament on ho vas deixar.")
-                        .font(.system(.title, design: .serif).weight(.bold))
-                        .foregroundStyle(sutsumuInk)
-
-                    Text("Una biblioteca sòlida, sincronització clara i adjunts lligats al document correcte sense fricció.")
-                        .font(.callout)
-                        .foregroundStyle(sutsumuMutedText)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Sutsumu")
+                        .font(.headline.weight(.semibold))
+                    Text("El teu espai personal, llest per reprendre a l’iPhone i al Mac.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
+                Spacer(minLength: 0)
+
+                statChip("Preparat", tint: bentoPrimary)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Obre l’app i continua exactament on ho vas deixar.")
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+
+                Text("Sutsumu prioritza una biblioteca clara, documents recents i adjunts lligats al context real de treball.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 8) {
                     miniTag("Espai personal")
                     miniTag("iPhone i Mac")
-                    miniTag("Flux professional")
+                    miniTag("Sense navegador")
                 }
 
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Text("Workspace principal")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(sutsumuInk)
                         Spacer(minLength: 8)
                         Text("Fa un moment")
                             .font(.caption)
-                            .foregroundStyle(sutsumuMutedText)
+                            .foregroundStyle(.secondary)
                     }
 
                     HStack(spacing: 10) {
@@ -92,20 +103,29 @@ struct AuthView: View {
                         welcomeNeutralMetric("Sync segur")
                     }
 
-                    VStack(spacing: 12) {
-                        welcomeWorkspaceRow(icon: "folder.fill", tint: bentoPrimary, title: "Clients", detail: "Contractes, seguiment i notes", accessory: "3")
-                        welcomeWorkspaceRow(icon: "doc.text.fill", tint: bentoBlue, title: "Proposta v3", detail: "Canvis preparats per continuar", accessory: "Nou")
-                        welcomeWorkspaceRow(icon: "paperclip.fill", tint: bentoGreen, title: "Adjunts", detail: "Fitxers lligats a cada document", accessory: "8")
+                    Divider()
+
+                    VStack(spacing: 10) {
+                        welcomeWorkspaceRow(icon: "folder.fill", tint: Color(red: 0.90, green: 0.62, blue: 0.22), title: "Clients", detail: "Contractes, seguiment i notes", accessory: "3")
+                        welcomeWorkspaceRow(icon: "doc.text.fill", tint: Color(red: 0.23, green: 0.56, blue: 0.92), title: "Proposta v3", detail: "Canvis preparats per continuar", accessory: "Nou")
+                        welcomeWorkspaceRow(icon: "paperclip.fill", tint: Color(red: 0.22, green: 0.66, blue: 0.53), title: "Adjunts", detail: "Fitxers lligats a cada document", accessory: "8")
                     }
                 }
-                .padding(18)
-                .background(sutsumuSoftSurface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .padding(14)
+                .background(Color(red: 0.97, green: 0.95, blue: 0.91), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(sutsumuBorder.opacity(0.9), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color(red: 0.82, green: 0.76, blue: 0.67), lineWidth: 0.5)
                 )
             }
         }
+        .padding(20)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color(red: 0.82, green: 0.76, blue: 0.67), lineWidth: 0.5)
+        )
+        .shadow(color: Color(red: 0.56, green: 0.38, blue: 0.18).opacity(0.18), radius: 6, x: 0, y: 3)
     }
 
     private var welcomeAccessCard: some View {
@@ -162,9 +182,7 @@ struct AuthView: View {
                 } else {
                     TextField("Correu electrònic", text: $appState.authEmail)
                         .sutsumuEmailEntry()
-                        .sutsumuTextEntry()
                     SecureField("Contrasenya", text: $appState.authPassword)
-                        .sutsumuTextEntry()
 
                     HStack(spacing: 10) {
                         Button("Entrar") {
@@ -237,9 +255,7 @@ struct AuthView: View {
             VStack(alignment: .leading, spacing: 12) {
                 TextField("Adreça del servidor (URL)", text: $appState.projectURL)
                     .sutsumuURLEntry()
-                    .sutsumuTextEntry()
                 SecureField("Clau d’accés", text: $appState.anonKey)
-                    .sutsumuTextEntry()
                 Text("Introdueix les dades del teu servidor. Només cal fer-ho una vegada.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -259,11 +275,11 @@ struct AuthView: View {
             .font(.system(size: 11, weight: .semibold))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(sutsumuSoftSurface, in: RoundedRectangle(cornerRadius: 8))
-            .foregroundStyle(sutsumuMutedText)
+            .background(Color(red: 0.93, green: 0.89, blue: 0.82), in: RoundedRectangle(cornerRadius: 6))
+            .foregroundStyle(Color(red: 0.48, green: 0.40, blue: 0.30))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(sutsumuBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color(red: 0.82, green: 0.76, blue: 0.67), lineWidth: 0.5)
             )
     }
 
@@ -282,10 +298,10 @@ struct AuthView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(sutsumuInk)
+                    .foregroundStyle(Color(red: 0.17, green: 0.12, blue: 0.06))
                 Text(detail)
                     .font(.caption)
-                    .foregroundStyle(sutsumuMutedText)
+                    .foregroundStyle(Color(red: 0.48, green: 0.40, blue: 0.30))
             }
 
             Spacer(minLength: 0)
@@ -298,8 +314,13 @@ struct AuthView: View {
                 .foregroundStyle(tint)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Color.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.vertical, 7)
+        .background(Color.white)
+        .overlay(
+            Divider()
+                .background(Color(red: 0.88, green: 0.83, blue: 0.75)),
+            alignment: .bottom
+        )
     }
 
     private func welcomeFeatureRow(icon: String, tint: Color, title: String, detail: String) -> some View {
@@ -317,10 +338,10 @@ struct AuthView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(sutsumuInk)
+                    .foregroundStyle(Color(red: 0.17, green: 0.12, blue: 0.06))
                 Text(detail)
                     .font(.caption)
-                    .foregroundStyle(sutsumuMutedText)
+                    .foregroundStyle(Color(red: 0.48, green: 0.40, blue: 0.30))
                     .lineLimit(2)
             }
 
@@ -342,10 +363,10 @@ struct AuthView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(sutsumuInk)
+                    .foregroundStyle(Color(red: 0.17, green: 0.12, blue: 0.06))
                 Text(detail)
                     .font(.caption)
-                    .foregroundStyle(sutsumuMutedText)
+                    .foregroundStyle(Color(red: 0.48, green: 0.40, blue: 0.30))
             }
         }
     }

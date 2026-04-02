@@ -25,11 +25,11 @@ struct ProfileView: View {
     // MARK: - Qui ets
 
     private var accountCard: some View {
-        sutsumuCard("Compte", tint: bentoBlue) {
+        sutsumuCard("Compte", tint: bentoPurple) {
             HStack(spacing: 14) {
                 ZStack {
                     Circle()
-                        .fill(bentoBlue)
+                        .fill(bentoPurple)
                         .frame(width: 54, height: 54)
                     Image(systemName: "person.fill")
                         .font(.title2)
@@ -39,7 +39,7 @@ struct ProfileView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(appState.authUserEmail.isEmpty ? "Compte de Sutsumu" : appState.authUserEmail)
                         .font(.callout.weight(.bold))
-                        .foregroundStyle(sutsumuInk)
+                        .foregroundStyle(Color(red: 0.17, green: 0.12, blue: 0.06))
                         .lineLimit(1)
                     HStack(spacing: 6) {
                         Circle()
@@ -47,7 +47,7 @@ struct ProfileView: View {
                             .frame(width: 7, height: 7)
                         Text(appState.isAuthenticated ? "Sessió activa" : "Sessió tancada")
                             .font(.caption)
-                            .foregroundStyle(sutsumuMutedText)
+                            .foregroundStyle(Color(red: 0.48, green: 0.40, blue: 0.30))
                     }
                 }
                 Spacer(minLength: 0)
@@ -60,31 +60,11 @@ struct ProfileView: View {
     private var syncCard: some View {
         sutsumuCard("Núvol", tint: bentoGreen) {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
-                    bentoMetric(
-                        title: "Estat",
-                        value: appState.syncStateLabel,
-                        tint: syncTint
-                    )
-
-                    bentoMetric(
-                        title: "Mode",
-                        value: appState.syncTransportLabel,
-                        tint: bentoBlue
-                    )
-                }
-
-                if appState.pendingOperationsCount > 0 {
-                    bentoMetric(
-                        title: "Pendents",
-                        value: "\(appState.pendingOperationsCount)",
-                        tint: bentoPrimary
-                    )
-                }
-
-                Text(appState.syncStateDetail)
-                    .font(.callout)
-                    .foregroundStyle(sutsumuMutedText)
+                bentoMetric(
+                    title: "Estat",
+                    value: appState.syncStateLabel,
+                    tint: bentoGreen
+                )
 
                 HStack(spacing: 10) {
                     Button("Sincronitzar ara") {
@@ -110,7 +90,7 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Espai de treball, connexió al servidor i còpies de seguretat.")
                     .font(.callout)
-                    .foregroundStyle(sutsumuMutedText)
+                    .foregroundStyle(Color(red: 0.48, green: 0.40, blue: 0.30))
 
                 Button("Obrir configuració") {
                     isShowingControlCenter = true
@@ -118,13 +98,5 @@ struct ProfileView: View {
                 .buttonStyle(SutsumuSoftButtonStyle())
             }
         }
-    }
-
-    private var syncTint: Color {
-        if appState.hasSyncConflict { return bentoRed }
-        if appState.isRemoteAheadOfLocal { return bentoBlue }
-        if appState.hasUnsyncedLocalChanges { return bentoPrimary }
-        if appState.canSync { return bentoGreen }
-        return sutsumuMutedText
     }
 }

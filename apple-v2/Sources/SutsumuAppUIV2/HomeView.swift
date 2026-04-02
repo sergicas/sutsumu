@@ -33,7 +33,7 @@ struct HomeView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(appState.workspaceName.isEmpty ? "El meu espai" : appState.workspaceName)
-                        .font(.system(.title2, design: .serif).weight(.bold))
+                        .font(.system(.title2, design: .rounded).weight(.bold))
                         .foregroundStyle(.white)
                     Text(appState.isAuthenticated
                          ? appState.authUserEmail
@@ -50,59 +50,54 @@ struct HomeView: View {
             }
 
             HStack(spacing: 10) {
-                heroMetric(
-                    title: "Documents",
-                    value: "\(appState.workspaceStats.documents)"
+                heroChip(
+                    icon: "doc.fill",
+                    value: "\(appState.workspaceStats.documents)",
+                    label: appState.workspaceStats.documents == 1 ? "document" : "documents"
                 )
-                heroMetric(
-                    title: "Carpetes",
-                    value: "\(appState.workspaceStats.folders)"
+                heroChip(
+                    icon: "folder.fill",
+                    value: "\(appState.workspaceStats.folders)",
+                    label: appState.workspaceStats.folders == 1 ? "carpeta" : "carpetes"
                 )
+                if appState.pendingOperationsCount > 0 {
+                    heroChip(
+                        icon: "arrow.up.circle.fill",
+                        value: "\(appState.pendingOperationsCount)",
+                        label: "per enviar"
+                    )
+                }
             }
-
-            heroMetric(
-                title: "Núvol",
-                value: heroCloudValue
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text("L'espai es manté clar, sincronitzat i preparat per reprendre la feina des de qualsevol dispositiu.")
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.74))
         }
         .padding(20)
-        .background {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.16, green: 0.22, blue: 0.31),
-                        Color(red: 0.22, green: 0.31, blue: 0.42)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-
-                RadialGradient(
-                    colors: [bentoPrimary.opacity(0.45), .clear],
-                    center: .topTrailing,
-                    startRadius: 12,
-                    endRadius: 180
-                )
-
-                RadialGradient(
-                    colors: [bentoBlue.opacity(0.30), .clear],
-                    center: .bottomLeading,
-                    startRadius: 16,
-                    endRadius: 220
-                )
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        }
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.88, green: 0.55, blue: 0.06),
+                    Color(red: 0.56, green: 0.26, blue: 0.03)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(.white.opacity(0.12), lineWidth: 1)
+                .stroke(.white.opacity(0.18), lineWidth: 1)
         )
-        .shadow(color: bentoBlue.opacity(0.18), radius: 18, x: 0, y: 10)
+        .shadow(color: Color(red: 0.56, green: 0.26, blue: 0.03).opacity(0.30), radius: 8, x: 0, y: 4)
+    }
+
+    private func heroChip(icon: String, value: String, label: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.system(size: 11, weight: .semibold))
+            Text("\(value) \(label)").font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundStyle(.white.opacity(0.92))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(.white.opacity(0.18))
+        .clipShape(Capsule())
     }
 
     // MARK: - Sync
@@ -117,10 +112,10 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(syncTitle)
                         .font(.callout.weight(.bold))
-                        .foregroundStyle(sutsumuInk)
-                    Text(appState.syncStateDetail)
+                        .foregroundStyle(Color(red: 0.17, green: 0.12, blue: 0.06))
+                    Text(syncDetail)
                         .font(.caption)
-                        .foregroundStyle(sutsumuMutedText)
+                        .foregroundStyle(Color(red: 0.48, green: 0.40, blue: 0.30))
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -148,7 +143,11 @@ struct HomeView: View {
     // MARK: - Status row
 
     private var statusRow: some View {
-        sutsumuStatusBanner(appState.statusMessage, tint: syncTint, icon: statusIcon)
+        Text(appState.statusMessage)
+            .font(.caption)
+            .foregroundStyle(Color(red: 0.48, green: 0.40, blue: 0.30))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
     }
 
     // MARK: - Sync helpers
@@ -166,29 +165,11 @@ struct HomeView: View {
     }
 
     private var syncTint: Color {
-        guard appState.isAuthenticated && appState.isSupabaseConfigured else { return sutsumuMutedText }
+        guard appState.isAuthenticated && appState.isSupabaseConfigured else { return Color(red: 0.48, green: 0.40, blue: 0.30) }
         if appState.hasSyncConflict      { return bentoRed }
         if appState.isRemoteAheadOfLocal { return bentoBlue }
         if appState.hasUnsyncedLocalChanges { return bentoPrimary }
         return bentoGreen
-    }
-
-    private var heroCloudValue: String {
-        if appState.hasSyncConflict { return "Revisió necessària" }
-        if appState.isRemoteAheadOfLocal { return "Versió remota nova" }
-        if appState.hasUnsyncedLocalChanges {
-            let pending = appState.pendingOperationsCount
-            return pending > 0 ? "\(pending) pendents" : "Canvis locals"
-        }
-        if appState.lastHead == nil { return "Primera sync" }
-        return "Tot al dia"
-    }
-
-    private var statusIcon: String {
-        if appState.hasSyncConflict { return "exclamationmark.triangle.fill" }
-        if appState.isRemoteAheadOfLocal { return "icloud.and.arrow.down.fill" }
-        if appState.hasUnsyncedLocalChanges { return "arrow.up.circle.fill" }
-        return "info.circle.fill"
     }
 
     private var syncTitle: String {
@@ -205,4 +186,13 @@ struct HomeView: View {
         return "Tot sincronitzat"
     }
 
+    private var syncDetail: String {
+        if !appState.isAuthenticated      { return "Prem 'Entrar' per connectar el teu espai al núvol." }
+        if !appState.isSupabaseConfigured { return "Configura el servidor des de la pantalla de Compte." }
+        if appState.hasSyncConflict       { return "Obre la Biblioteca, toca l'element en conflicte i tria quina versió vols." }
+        if appState.isRemoteAheadOfLocal  { return "Prem el botó per baixar la darrera versió que s'ha pujat des d'un altre dispositiu." }
+        if appState.hasUnsyncedLocalChanges { return "Prem el botó per enviar els darrers canvis." }
+        if appState.lastHead == nil        { return "Prem per fer la primera còpia al núvol." }
+        return "Els teus documents estan actualitzats al núvol."
+    }
 }
