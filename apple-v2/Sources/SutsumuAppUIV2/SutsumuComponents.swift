@@ -87,44 +87,42 @@ public var editorBackgroundColor: Color {
     Color(red: 0.95, green: 0.92, blue: 0.86)
 }
 
-// MARK: - Bento Card
-// Each card has a solid colored header bar (like Bento's collection headers)
-// and a clean white body, like a physical index card or bento compartment.
+// MARK: - Section Card
+// Subtle section label + clean white card — no colored header bar.
 
 public func sutsumuCard<Content: View>(
     _ title: String,
     tint: Color = Color(red: 0.88, green: 0.55, blue: 0.06),
     @ViewBuilder content: () -> Content
 ) -> some View {
-    VStack(alignment: .leading, spacing: 0) {
-        // Bento-style colored header strip
-        HStack(spacing: 0) {
+    VStack(alignment: .leading, spacing: 8) {
+        // Subtle section label with a thin accent pill
+        HStack(spacing: 6) {
+            Capsule()
+                .fill(tint)
+                .frame(width: 3, height: 13)
             Text(title)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(bentoTextSec)
                 .textCase(.uppercase)
-                .tracking(0.9)
-                .lineLimit(1)
-            Spacer(minLength: 0)
+                .tracking(0.5)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .background(tint)
+        .padding(.leading, 2)
 
-        // White card body
+        // White content card
         VStack(alignment: .leading, spacing: 12) {
             content()
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(bentoBorder.opacity(0.8), lineWidth: 0.5)
+        )
+        .shadow(color: Color(red: 0.55, green: 0.43, blue: 0.28).opacity(0.10), radius: 4, x: 0, y: 2)
     }
-    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-    .shadow(color: Color(red: 0.60, green: 0.48, blue: 0.33).opacity(0.22), radius: 4, x: 0, y: 2)
-    .overlay(
-        RoundedRectangle(cornerRadius: 13, style: .continuous)
-            .stroke(bentoBorder, lineWidth: 0.5)
-    )
 }
 
 // MARK: - Stat Chip

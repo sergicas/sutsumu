@@ -142,8 +142,8 @@ struct LibraryView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(bgColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(borderColor, lineWidth: borderWidth))
+        .background(bgColor, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(borderColor, lineWidth: borderWidth))
         .shadow(color: shadowColor, radius: 10, x: 0, y: 4)
         .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isDropTarget)
     }
@@ -166,16 +166,16 @@ struct LibraryView: View {
     @ViewBuilder
     private func itemRowIcon(row: SutsumuWorkspaceOutlineRow, itemColor: Color, isDropTarget: Bool) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(LinearGradient(colors: [itemColor, itemColor.opacity(0.75)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 40, height: 40)
+                .frame(width: 34, height: 34)
             Image(systemName: row.type == .folder ? "folder.fill" : "doc.text.fill")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
             if isDropTarget {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(.white.opacity(0.7), lineWidth: 2)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 34, height: 34)
             }
         }
     }
@@ -426,16 +426,15 @@ struct ItemEditorView: View {
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $appState.editorContent)
                     .frame(minHeight: 200)
-                    .font(.system(.body, design: .rounded))
+                    .font(.body)
                     .scrollContentBackground(.hidden)
-                    .padding(12)
+                    .padding(10)
                     .background(sutsumuSoftSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(sutsumuBorder.opacity(0.9), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(sutsumuBorder, lineWidth: 0.5)
                     )
-                    .shadow(color: Color.black.opacity(0.03), radius: 8, x: 0, y: 4)
                 if appState.editorContent.isEmpty {
                     Text("Escriu el contingut del document…")
                         .foregroundStyle(sutsumuMutedText)
@@ -553,11 +552,11 @@ struct ItemEditorView: View {
                 .frame(minHeight: 160, maxHeight: 400)
                 .font(.system(.footnote, design: .monospaced))
                 .scrollContentBackground(.hidden)
-                .padding(10)
-                .background(editorBackgroundColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(8)
+                .background(editorBackgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(hasChanges ? bentoPrimary.opacity(0.4) : sutsumuBorder.opacity(0.8), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(hasChanges ? bentoPrimary.opacity(0.5) : sutsumuBorder, lineWidth: 0.5)
                 )
             HStack(spacing: 8) {
                 if hasChanges {
@@ -644,21 +643,21 @@ struct ItemEditorView: View {
     // MARK: - Helpers visuals
 
     private func editorField<Content: View>(label: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 5) {
             Text(label)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(sutsumuMutedText)
                 .textCase(.uppercase)
-                .tracking(0.9)
+                .tracking(0.4)
 
             content()
-                .padding(.horizontal, 16)
-                .padding(.vertical, 13)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(sutsumuSoftSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(sutsumuSoftSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(sutsumuBorder.opacity(0.9), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(sutsumuBorder, lineWidth: 0.5)
                 )
         }
     }
