@@ -93,114 +93,11 @@ struct LibraryView: View {
             appState.selectItem(id: row.id)
             selectItem(row.id)
         } label: {
-            HStack(spacing: 13) {
-                // Depth indent with connecting line
-                if row.depth > 0 {
-                    HStack(spacing: 0) {
-                        ForEach(0..<row.depth, id: \.self) { _ in
-                            Rectangle()
-                                .fill(sutsumuBorder.opacity(0.5))
-                                .frame(width: 1)
-                                .padding(.horizontal, 6)
-                        }
-                    }
-                    .frame(height: 44)
-                }
-
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [itemColor, itemColor.opacity(0.75)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 40, height: 40)
-                    Image(systemName: row.type == .folder ? "folder.fill" : "doc.text.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                    if isDropTarget {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(.white.opacity(0.7), lineWidth: 2)
-                            .frame(width: 40, height: 40)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 5) {
-                        Text(row.title)
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(sutsumuInk)
-                            .lineLimit(1)
-                        if row.isPinned {
-                            Image(systemName: "pin.fill")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(itemColor.opacity(0.7))
-                        }
-                        if row.isFavorite {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(bentoPrimary)
-                        }
-                    }
-                    if isDropTarget {
-                        Text("Mou aquí")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(itemColor)
-                    } else {
-                        Text(row.type == .folder ? "Carpeta" : "Document")
-                            .font(.caption)
-                            .foregroundStyle(sutsumuMutedText)
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: isDropTarget ? "plus.circle.fill" : "chevron.right")
-                    .font(.system(size: isDropTarget ? 16 : 11, weight: .semibold))
-                    .foregroundStyle(isDropTarget ? itemColor : sutsumuMutedText.opacity(0.8))
-                    .animation(.spring(response: 0.2), value: isDropTarget)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                isDropTarget
-                    ? itemColor.opacity(0.10)
-                    : (isSelected ? itemColor.opacity(0.08) : Color.white.opacity(0.86)),
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(
-                        isDropTarget
-                            ? itemColor.opacity(0.55)
-                            : (isSelected ? itemColor.opacity(0.35) : sutsumuBorder.opacity(0.9)),
-                        lineWidth: isDropTarget ? 2 : 1
-                    )
-            )
-            .shadow(color: isDropTarget ? itemColor.opacity(0.15) : Color.black.opacity(0.03), radius: 10, x: 0, y: 4)
-            .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isDropTarget)
+            itemRowLabel(row: row, itemColor: itemColor, isSelected: isSelected, isDropTarget: isDropTarget)
         }
         .buttonStyle(.plain)
         .draggable(row.id) {
-            // Compact drag preview
-            HStack(spacing: 10) {
-                Image(systemName: row.type == .folder ? "folder.fill" : "doc.text.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(9)
-                    .background(itemColor, in: RoundedRectangle(cornerRadius: 10))
-                Text(row.title)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(sutsumuInk)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
-            .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 5)
+            itemRowDragPreview(row: row, itemColor: itemColor)
         }
         .dropDestination(for: String.self) { ids, _ in
             guard row.type == .folder, let id = ids.first, id != row.id else { return false }
@@ -208,13 +105,129 @@ struct LibraryView: View {
             return true
         } isTargeted: { targeted in
             if row.type == .folder {
-                if targeted {
-                    dropTargetId = row.id
-                } else if dropTargetId == row.id {
-                    dropTargetId = nil
-                }
+                if targeted { dropTargetId = row.id }
+                else if dropTargetId == row.id { dropTargetId = nil }
             }
         }
+    }
+
+    private func itemRowLabel(
+        row: SutsumuWorkspaceOutlineRow,
+        itemColor: Color,
+        isSelected: Bool,
+        isDropTarget: Bool
+    ) -> some View {
+        let bgColor: Color = isDropTarget ? itemColor.opacity(0.10)
+            : isSelected ? itemColor.opacity(0.08)
+            : Color.white.opacity(0.86)
+        let borderColor: Color = isDropTarget ? itemColor.opacity(0.55)
+            : isSelected ? itemColor.opacity(0.35)
+            : sutsumuBorder.opacity(0.9)
+        let borderWidth: CGFloat = isDropTarget ? 2 : 1
+        let trailingIcon = isDropTarget ? "plus.circle.fill" : "chevron.right"
+        let trailingSize: CGFloat = isDropTarget ? 16 : 11
+        let trailingColor: Color = isDropTarget ? itemColor : sutsumuMutedText.opacity(0.8)
+        let shadowColor: Color = isDropTarget ? itemColor.opacity(0.15) : Color.black.opacity(0.03)
+
+        return HStack(spacing: 13) {
+            itemRowDepthLines(depth: row.depth)
+            itemRowIcon(row: row, itemColor: itemColor, isDropTarget: isDropTarget)
+            itemRowText(row: row, itemColor: itemColor, isDropTarget: isDropTarget)
+            Spacer(minLength: 0)
+            Image(systemName: trailingIcon)
+                .font(.system(size: trailingSize, weight: .semibold))
+                .foregroundStyle(trailingColor)
+                .animation(.spring(response: 0.2), value: isDropTarget)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(bgColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(borderColor, lineWidth: borderWidth))
+        .shadow(color: shadowColor, radius: 10, x: 0, y: 4)
+        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isDropTarget)
+    }
+
+    @ViewBuilder
+    private func itemRowDepthLines(depth: Int) -> some View {
+        if depth > 0 {
+            HStack(spacing: 0) {
+                ForEach(0..<depth, id: \.self) { _ in
+                    Rectangle()
+                        .fill(sutsumuBorder.opacity(0.5))
+                        .frame(width: 1)
+                        .padding(.horizontal, 6)
+                }
+            }
+            .frame(height: 44)
+        }
+    }
+
+    @ViewBuilder
+    private func itemRowIcon(row: SutsumuWorkspaceOutlineRow, itemColor: Color, isDropTarget: Bool) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(LinearGradient(colors: [itemColor, itemColor.opacity(0.75)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 40, height: 40)
+            Image(systemName: row.type == .folder ? "folder.fill" : "doc.text.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+            if isDropTarget {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(.white.opacity(0.7), lineWidth: 2)
+                    .frame(width: 40, height: 40)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func itemRowText(row: SutsumuWorkspaceOutlineRow, itemColor: Color, isDropTarget: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Text(row.title)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(sutsumuInk)
+                    .lineLimit(1)
+                if row.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(itemColor.opacity(0.7))
+                }
+                if row.isFavorite {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(bentoPrimary)
+                }
+            }
+            if isDropTarget {
+                Text("Mou aquí")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(itemColor)
+            } else {
+                Text(row.type == .folder ? "Carpeta" : "Document")
+                    .font(.caption)
+                    .foregroundStyle(sutsumuMutedText)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func itemRowDragPreview(row: SutsumuWorkspaceOutlineRow, itemColor: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: row.type == .folder ? "folder.fill" : "doc.text.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(9)
+                .background(itemColor, in: RoundedRectangle(cornerRadius: 10))
+            Text(row.title)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(sutsumuInk)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
+        .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 5)
     }
 
     // MARK: - Estat buit
