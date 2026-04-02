@@ -138,6 +138,7 @@ final class AppState: ObservableObject {
     @Published var editorIsFavorite = false
     @Published var editorIsPinned = false
     @Published var editorParentId: String = "root"
+    @Published var editorAttachmentText: String = ""
     @Published private(set) var downloadedAttachmentURL: URL?
     @Published private(set) var downloadedAttachmentDisplayName = ""
     @Published private(set) var downloadedAttachmentObjectKey = ""
@@ -372,6 +373,17 @@ final class AppState: ObservableObject {
         guard downloadedAttachmentObjectKey == selectedAttachment?.remoteObjectKey else { return nil }
         let preview = downloadedAttachmentPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
         return preview.isEmpty ? nil : preview
+    }
+
+    var canEditAttachmentText: Bool {
+        guard let attachment = selectedAttachment,
+              downloadedAttachmentObjectKey == attachment.remoteObjectKey,
+              !downloadedAttachmentPreviewText.isEmpty else { return false }
+        let mimeType = downloadedAttachmentPreviewMIMEType.lowercased()
+        let format = attachment.sourceFormat.lowercased()
+        if mimeType.hasPrefix("text/") || mimeType == "application/json" { return true }
+        return ["txt", "md", "csv", "json", "log", "yaml", "yml", "xml",
+                "html", "css", "js", "ts", "swift", "py", "sh", "rb"].contains(format)
     }
 
     var selectedAttachmentImagePreviewData: Data? {
@@ -1407,11 +1419,83 @@ final class AppState: ObservableObject {
             downloadedAttachmentPreviewText = preview.textPreview
             downloadedAttachmentPreviewMIMEType = download.mimeType
             downloadedAttachmentImageData = preview.imageData
+            editorAttachmentText = preview.textPreview
             statusMessage = "Adjunt descarregat correctament."
         } catch let error as SupabaseStorageClientError {
             statusMessage = error.localizedDescription
         } catch {
             statusMessage = "No he pogut descarregar l'adjunt: \(error.localizedDescription)"
+        }
+    }
+
+    func saveAttachmentTextEdits() async {
+        guard let selectedItemId, let attachment = selectedAttachment else {
+            statusMessage = "Selecciona un document amb un adjunt de text."
+            return
+        }
+        guard canSync else {
+            statusMessage = "Cal connexió i sessió activa per guardar canvis a l'adjunt."
+            return
+        }
+
+        let editedText = editorAttachmentText
+        guard let data = editedText.data(using: .utf8) else {
+            statusMessage = "No s'ha pogut convertir el text editat a dades."
+            return
+        }
+
+        guard beginTask("Guardant canvis a l'adjunt...") else { return }
+        defer { isLoading = false }
+
+        do {
+            let storageClient = try makeStorageClient(
+                projectURLText: projectURL,
+                anonKeyText: anonKey,
+                sessionToken: sessionToken
+            )
+
+            let newChecksum = SupabaseStorageClient.sha256ChecksumHex(for: data)
+            let userId = currentSession?.user.id ?? ""
+            let ext = attachment.sourceFormat.isEmpty
+                ? URL(fileURLWithPath: attachment.fileName).pathExtension
+                : attachment.sourceFormat
+            let newObjectKey = SupabaseStorageClient.objectKey(
+                userId: userId,
+                checksum: newChecksum,
+                preferredExtension: ext
+            )
+
+            let uploadResult = try await storageClient.upload(
+                data: data,
+                objectKey: newObjectKey,
+                contentType: attachment.fileType.isEmpty ? "text/plain" : attachment.fileType
+            )
+
+            let updatedAttachment = SutsumuWorkspaceAttachment(
+                fileName: attachment.fileName,
+                fileType: attachment.fileType.isEmpty ? "text/plain" : attachment.fileType,
+                fileSize: data.count,
+                sourceFormat: attachment.sourceFormat,
+                checksum: newChecksum,
+                remoteObjectKey: uploadResult.objectKey,
+                availability: "uploaded"
+            )
+
+            guard workspaceModel.updateItem(id: selectedItemId, mutate: { item in
+                item.attachment = updatedAttachment
+            }), let updatedItem = workspaceModel.item(id: selectedItemId) else {
+                statusMessage = "No he pogut actualitzar el document amb el nou adjunt."
+                return
+            }
+
+            downloadedAttachmentObjectKey = uploadResult.objectKey
+            downloadedAttachmentPreviewText = editedText
+
+            loadEditor(from: updatedItem)
+            recordPendingOperation(.upsert(item: updatedItem, summary: "attachment:edit:\(updatedItem.id)"))
+            syncLocalPayloadFromWorkspace(status: "Canvis a l'adjunt guardats correctament.")
+        } catch {
+            statusMessage = "Error en guardar els canvis: \(error.localizedDescription)"
         }
     }
 
@@ -1965,6 +2049,7 @@ final class AppState: ObservableObject {
         downloadedAttachmentPreviewText = ""
         downloadedAttachmentPreviewMIMEType = ""
         downloadedAttachmentImageData = nil
+        editorAttachmentText = ""
     }
 
     private func shortSignature(_ value: String?) -> String? {

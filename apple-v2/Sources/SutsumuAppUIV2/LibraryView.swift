@@ -479,6 +479,8 @@ struct ItemEditorView: View {
                         .scaledToFit()
                         .frame(maxHeight: 180)
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                } else if appState.canEditAttachmentText {
+                    attachmentTextEditor
                 } else if let preview = appState.selectedAttachmentPreviewText {
                     ScrollView {
                         Text(preview)
@@ -519,6 +521,57 @@ struct ItemEditorView: View {
                             .buttonStyle(SutsumuOutlineButtonStyle(tint: .red))
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: - Editor d'adjunt de text
+
+    private var attachmentTextEditor: some View {
+        let hasChanges = appState.editorAttachmentText != appState.downloadedAttachmentPreviewText
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "pencil.and.list.clipboard")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(bentoGreen)
+                Text("Text editable")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(sutsumuMutedText)
+                    .textCase(.uppercase)
+                    .tracking(0.6)
+                Spacer()
+                if hasChanges {
+                    Text("Canvis no desats")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(bentoPrimary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(bentoPrimary.opacity(0.10), in: Capsule())
+                }
+            }
+            TextEditor(text: $appState.editorAttachmentText)
+                .frame(minHeight: 160, maxHeight: 400)
+                .font(.system(.footnote, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(10)
+                .background(editorBackgroundColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(hasChanges ? bentoPrimary.opacity(0.4) : sutsumuBorder.opacity(0.8), lineWidth: 1)
+                )
+            HStack(spacing: 8) {
+                if hasChanges {
+                    Button("Descartar canvis") {
+                        appState.editorAttachmentText = appState.downloadedAttachmentPreviewText
+                    }
+                    .buttonStyle(SutsumuOutlineButtonStyle())
+                }
+                Spacer()
+                Button("Desar canvis") {
+                    Task { @MainActor in await appState.saveAttachmentTextEdits() }
+                }
+                .buttonStyle(SutsumuProminentButtonStyle())
+                .disabled(appState.isLoading || !hasChanges)
             }
         }
     }
