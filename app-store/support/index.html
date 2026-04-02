@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Sutsumu Support</title>
+  <style>
+    :root {
+      --bg-top: #edf7ff;
+      --bg-bottom: #f7fbf6;
+      --card: rgba(255, 255, 255, 0.82);
+      --line: rgba(15, 23, 42, 0.08);
+      --text: #0f172a;
+      --muted: #4b5563;
+      --brand-a: #165dc0;
+      --brand-b: #17a189;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(22, 93, 192, 0.14), transparent 32rem),
+        radial-gradient(circle at bottom right, rgba(23, 161, 137, 0.14), transparent 28rem),
+        linear-gradient(160deg, var(--bg-top), var(--bg-bottom));
+      min-height: 100vh;
+    }
+
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 20px 72px;
+    }
+
+    .hero, .card {
+      background: var(--card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      box-shadow: 0 18px 60px rgba(15, 23, 42, 0.08);
+    }
+
+    .hero {
+      padding: 32px;
+      margin-bottom: 18px;
+    }
+
+    .card {
+      padding: 24px;
+      margin-top: 18px;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(22, 93, 192, 0.10);
+      color: var(--brand-a);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1, h2 {
+      margin: 0 0 12px;
+      line-height: 1.1;
+    }
+
+    h1 {
+      margin-top: 14px;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+    }
+
+    h2 { font-size: 1.2rem; }
+
+    p, li {
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.65;
+    }
+
+    ul {
+      padding-left: 20px;
+      margin: 0;
+    }
+
+    a {
+      color: var(--brand-a);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    .button-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 16px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
+      color: white;
+      box-shadow: 0 14px 30px rgba(22, 93, 192, 0.18);
+    }
+
+    .button.secondary {
+      background: white;
+      color: var(--text);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div class="eyebrow">Sutsumu</div>
+      <h1>Support</h1>
+      <p>Sutsumu és una app per treballar amb workspaces, documents, carpetes i adjunts amb autenticació i sincronització segura.</p>
+      <p>Si tens un problema amb l'app, el compte o la sincronització, fes servir els canals següents.</p>
+      <div class="button-row">
+        <a class="button" href="https://github.com/sergicas/sutsumu/issues">Obrir una incidència</a>
+        <a class="button secondary" href="https://sergicas.github.io/sutsumu/">Veure el projecte</a>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Què incloure al report</h2>
+        <ul>
+          <li>Dispositiu i versió d'iOS o iPadOS.</li>
+          <li>Passos exactes per reproduir el problema.</li>
+          <li>Si afecta login, sync, adjunts o recuperació.</li>
+          <li>Captures de pantalla si ajuden a entendre el cas.</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>Problemes habituals</h2>
+        <ul>
+          <li>Login o registre.</li>
+          <li>Recuperació de contrasenya.</li>
+          <li>Sincronització del workspace.</li>
+          <li>Pujada o baixada d'adjunts.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Privacitat</h2>
+      <p>La política de privacitat pública d'aquesta app està disponible aquí:</p>
+      <p><a href="https://sergicas.github.io/sutsumu/app-store/privacy/">https://sergicas.github.io/sutsumu/app-store/privacy/</a></p>
+    </section>
+  </main>
+</body>
+</html>

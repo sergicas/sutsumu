@@ -1,4 +1,7 @@
-project_id = "sutsumu-local"
+project_id = "vlyhfgrxpyyscsklxoru"
 
 [functions.sutsumu-head]
+verify_jwt = false
+
+[functions.sutsumu-sync-v2]
 verify_jwt = false
