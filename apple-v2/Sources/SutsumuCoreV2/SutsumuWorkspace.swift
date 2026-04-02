@@ -413,6 +413,15 @@ public struct SutsumuWorkspace: Codable, Equatable, Sendable {
         return true
     }
 
+    /// Moves `id` to a new parent. Returns false if the move would create a cycle or is otherwise invalid.
+    @discardableResult
+    public mutating func moveItem(id: String, toParentId: String) -> Bool {
+        guard isValidParent(toParentId, for: id) else { return false }
+        return updateItem(id: id) { item in
+            item.parentId = toParentId
+        }
+    }
+
     public mutating func ensureExpanded(folderId: String) {
         guard item(id: folderId)?.isFolder == true else { return }
         if !expandedFolders.contains(folderId) {

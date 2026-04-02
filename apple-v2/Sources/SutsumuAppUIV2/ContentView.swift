@@ -206,42 +206,78 @@ public struct ContentView: View {
     private var macWelcomeDetail: some View {
         VStack(spacing: 20) {
             Spacer()
-            Image(systemName: "tray.2.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(bentoPrimary.opacity(0.4))
-            VStack(spacing: 6) {
-                Text(macSyncTitle)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(Color(red: 0.17, green: 0.12, blue: 0.06))
-                Text(macSyncDetail)
-                    .font(.callout)
-                    .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.37))
-                    .multilineTextAlignment(.center)
-            }
-            if appState.hasSyncConflict && appState.lastHead != nil {
-                Button {
-                    appState.applyRemoteToLocal()
-                } label: {
-                    Label("Pren la versió del servidor", systemImage: "icloud.and.arrow.down")
+            sutsumuSurfacePanel(tint: macWelcomeTint) {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack(alignment: .top, spacing: 16) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [macWelcomeTint, bentoBlue],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 62, height: 62)
+                            Image(systemName: "tray.2.fill")
+                                .font(.system(size: 24, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(macSyncTitle)
+                                .font(.system(.title2, design: .serif).weight(.bold))
+                                .foregroundStyle(sutsumuInk)
+                            Text(macSyncDetail)
+                                .font(.callout)
+                                .foregroundStyle(sutsumuMutedText)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        statChip(appState.syncStateLabel, tint: macWelcomeTint)
+                    }
+
+                    HStack(spacing: 10) {
+                        bentoMetric(
+                            title: "Workspace",
+                            value: appState.workspaceName.isEmpty ? "Sutsumu" : appState.workspaceName,
+                            tint: bentoPrimary
+                        )
+
+                        bentoMetric(
+                            title: "Elements",
+                            value: "\(appState.workspaceStats.documents + appState.workspaceStats.folders)",
+                            tint: bentoBlue
+                        )
+                    }
+
+                    if !appState.statusMessage.isEmpty {
+                        sutsumuStatusBanner(appState.statusMessage, tint: macWelcomeTint, icon: macWelcomeIcon)
+                    }
+
+                    if appState.hasSyncConflict && appState.lastHead != nil {
+                        Button {
+                            appState.applyRemoteToLocal()
+                        } label: {
+                            Label("Pren la versió del servidor", systemImage: "icloud.and.arrow.down")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(SutsumuProminentButtonStyle())
+                        .disabled(appState.isLoading)
+                    } else if appState.canSync {
+                        Button {
+                            Task { @MainActor in await appState.syncNow() }
+                        } label: {
+                            Label("Sincronitzar ara", systemImage: "icloud.and.arrow.up")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(SutsumuProminentButtonStyle())
+                        .disabled(appState.isLoading)
+                    }
                 }
-                .buttonStyle(SutsumuProminentButtonStyle())
-                .disabled(appState.isLoading)
-            } else if appState.canSync {
-                Button {
-                    Task { @MainActor in await appState.syncNow() }
-                } label: {
-                    Label("Sincronitzar ara", systemImage: "icloud.and.arrow.up")
-                }
-                .buttonStyle(SutsumuProminentButtonStyle())
-                .disabled(appState.isLoading)
             }
-            if !appState.statusMessage.isEmpty {
-                Text(appState.statusMessage)
-                    .font(.caption)
-                    .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.37))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
+            .frame(maxWidth: 560)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -274,6 +310,20 @@ public struct ContentView: View {
         if appState.isLoading { return "Treballant…" }
         return "Sincronitzar amb el núvol"
     }
+
+    private var macWelcomeTint: Color {
+        if appState.hasSyncConflict { return bentoRed }
+        if appState.isRemoteAheadOfLocal { return bentoBlue }
+        if appState.hasUnsyncedLocalChanges { return bentoPrimary }
+        return bentoGreen
+    }
+
+    private var macWelcomeIcon: String {
+        if appState.hasSyncConflict { return "exclamationmark.triangle.fill" }
+        if appState.isRemoteAheadOfLocal { return "icloud.and.arrow.down.fill" }
+        if appState.hasUnsyncedLocalChanges { return "arrow.up.circle.fill" }
+        return "checkmark.icloud.fill"
+    }
 }
 
 // MARK: - Subviews
@@ -289,12 +339,16 @@ struct ControlCenterSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    sutsumuCard(appState.isManagedConnection ? "Compte i ajuda" : "Compte i connexió") {
+                    if !appState.statusMessage.isEmpty {
+                        sutsumuStatusBanner(appState.statusMessage, tint: appState.syncStateTint, icon: "info.circle.fill")
+                    }
+
+                    sutsumuCard(appState.isManagedConnection ? "Compte i ajuda" : "Compte i connexió", tint: bentoBlue) {
                         Text(appState.isManagedConnection
                              ? "Gestiona la sessió, l'espai i els enllaços d'ajuda."
                              : "Configuració tècnica i de compte de Supabase.")
                             .font(.callout)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(sutsumuMutedText)
                     }
                     
                     if !appState.isManagedConnection {
@@ -319,27 +373,38 @@ struct ControlCenterSheet: View {
     }
 
     private var connectionSection: some View {
-        sutsumuCard("Connexió al servidor") {
+        sutsumuCard("Connexió al servidor", tint: bentoBlue) {
             VStack(alignment: .leading, spacing: 12) {
                 TextField("Adreça del servidor (URL)", text: $appState.projectURL)
                     .sutsumuURLEntry()
+                    .sutsumuTextEntry()
                 SecureField("Clau d'accés", text: $appState.anonKey)
+                    .sutsumuTextEntry()
                 Text("Pots trobar aquestes dades al panell del teu compte.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(sutsumuMutedText)
             }
         }
     }
 
     private var authSection: some View {
-        sutsumuCard("Sessió") {
+        sutsumuCard("Sessió", tint: bentoGreen) {
             VStack(alignment: .leading, spacing: 12) {
                 if appState.isAuthenticated {
-                    Text(appState.authUserEmail).font(.headline)
+                    Text(appState.authUserEmail)
+                        .font(.headline)
+                        .foregroundStyle(sutsumuInk)
+                    Text("La sessió està preparada perquè la sincronització sigui transparent entre dispositius.")
+                        .font(.callout)
+                        .foregroundStyle(sutsumuMutedText)
                     Button("Tancar sessió") { Task { @MainActor in await appState.signOut() } }
                         .buttonStyle(SutsumuOutlineButtonStyle(tint: .red))
                 } else {
                     Text("No has iniciat sessió")
+                        .foregroundStyle(sutsumuInk)
+                    Text("Entra amb el teu compte per activar la sincronització del workspace.")
+                        .font(.callout)
+                        .foregroundStyle(sutsumuMutedText)
                     Button("Anar a Login") { isShowing = false }
                         .buttonStyle(SutsumuProminentButtonStyle())
                 }
@@ -348,15 +413,19 @@ struct ControlCenterSheet: View {
     }
 
     private var workspaceSection: some View {
-        sutsumuCard("Espai de treball") {
+        sutsumuCard("Espai de treball", tint: bentoPrimary) {
             VStack(alignment: .leading, spacing: 12) {
                 TextField("Nom de l'espai", text: $appState.workspaceName)
+                    .sutsumuTextEntry()
+                Text("Aquest nom és el que veuràs al Mac i a l'iPhone per identificar l'espai actiu.")
+                    .font(.caption)
+                    .foregroundStyle(sutsumuMutedText)
             }
         }
     }
 
     private var actionsSection: some View {
-        sutsumuCard("Còpia de seguretat") {
+        sutsumuCard("Còpia de seguretat", tint: bentoPurple) {
             VStack(alignment: .leading, spacing: 10) {
                 Button("Restaurar des d'arxiu") { isImportingLocalJSON = true }
                     .buttonStyle(SutsumuSoftButtonStyle())
@@ -369,7 +438,7 @@ struct ControlCenterSheet: View {
                 .buttonStyle(SutsumuSoftButtonStyle())
                 Text("La còpia guarda tot el teu contingut en un arxiu que pots desar on vulguis.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(sutsumuMutedText)
             }
         }
     }

@@ -137,6 +137,7 @@ final class AppState: ObservableObject {
     @Published var editorColor = "#0ea5e9"
     @Published var editorIsFavorite = false
     @Published var editorIsPinned = false
+    @Published var editorParentId: String = "root"
     @Published private(set) var downloadedAttachmentURL: URL?
     @Published private(set) var downloadedAttachmentDisplayName = ""
     @Published private(set) var downloadedAttachmentObjectKey = ""
@@ -1523,12 +1524,17 @@ final class AppState: ObservableObject {
         let editorContent = self.editorContent
         let editorIsFavorite = self.editorIsFavorite
         let editorIsPinned = self.editorIsPinned
+        let editorParentId = self.editorParentId
+        let parentIsValid = workspaceModel.isValidParent(editorParentId, for: selectedItemId)
 
         let updated = workspaceModel.updateItem(id: selectedItemId) { item in
             item.title = cleanedTitle
             item.tags = cleanedTags
             item.isFavorite = editorIsFavorite
             item.isPinned = editorIsPinned
+            if parentIsValid {
+                item.parentId = editorParentId
+            }
 
             if item.isFolder {
                 item.desc = editorDescription
@@ -1578,8 +1584,32 @@ final class AppState: ObservableObject {
         )
     }
 
+    func moveItem(id: String, toParentId: String) {
+        guard workspaceModel.isValidParent(toParentId, for: id) else {
+            statusMessage = "No puc moure l'element a aquell destí."
+            return
+        }
+        guard workspaceModel.moveItem(id: id, toParentId: toParentId),
+              let updated = workspaceModel.item(id: id) else { return }
+        if selectedItemId == id {
+            editorParentId = toParentId
+        }
+        recordPendingOperation(.upsert(item: updated, summary: "item:move:\(id)"))
+        syncLocalPayloadFromWorkspace(status: nil)
+    }
+
+    func availableFolderDestinations(excludingId: String) -> [(id: String, title: String, depth: Int)] {
+        var result: [(id: String, title: String, depth: Int)] = [(id: "root", title: "Arrel", depth: 0)]
+        for row in workspaceOutlineRows where row.type == .folder && row.id != excludingId {
+            if workspaceModel.isValidParent(row.id, for: excludingId) {
+                result.append((id: row.id, title: row.title, depth: row.depth))
+            }
+        }
+        return result
+    }
+
     // MARK: - Helper Methods
-    
+
     var suggestedExportFilename: String {
         let trimmedName = localDocumentName.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedName.isEmpty {
@@ -1635,6 +1665,7 @@ final class AppState: ObservableObject {
         editorTagsText = item.tags.joined(separator: ", ")
         editorIsFavorite = item.isFavorite
         editorIsPinned = item.isPinned
+        editorParentId = item.parentId
         if item.isFolder {
             editorCategory = ""
             editorContent = ""
@@ -1658,6 +1689,7 @@ final class AppState: ObservableObject {
         editorColor = "#0ea5e9"
         editorIsFavorite = false
         editorIsPinned = false
+        editorParentId = "root"
     }
 
     private func parseTags(_ rawValue: String) -> [String] {
