@@ -722,7 +722,7 @@ test('connects a Supabase Edge Function head with a shared key safely', async ({
   const builtUrl = new URL(capturedUrl);
   expect(builtUrl.pathname).toBe('/functions/v1/sutsumu-head');
   expect(builtUrl.searchParams.get('workspace_id')).toBe(latestRevision.workspaceId);
-  expect(capturedHeaders['x-sutsumu-key']).toBe('shared-edge-key');
+  expect(builtUrl.searchParams.get('sutsumu_key')).toBe('shared-edge-key');
 
   await remoteContext.close();
 });
@@ -744,6 +744,7 @@ test('pushes the local head manually to a Supabase Edge backend without silent o
 
   const postBodies = [];
   const postHeaders = [];
+  const postUrls = [];
   await page.context().route('https://push.supabase.co/functions/v1/sutsumu-head*', async route => {
     const request = route.request();
     if (request.method() === 'GET') {
@@ -758,6 +759,7 @@ test('pushes the local head manually to a Supabase Edge backend without silent o
     }
 
     postHeaders.push(request.headers());
+    postUrls.push(request.url());
     postBodies.push(JSON.parse(request.postData() || '{}'));
     const pushedHead = postBodies[0].bundle.revisions[0];
     return route.fulfill({
@@ -799,7 +801,8 @@ test('pushes the local head manually to a Supabase Edge backend without silent o
   await expectToast(page, 'Push remot completat');
   await expect(page.locator('#syncRemoteBadge')).toContainText('Al dia');
 
-  expect(postHeaders[0]['x-sutsumu-key']).toBe('shared-edge-key');
+  const postUrl = new URL(postUrls[0]);
+  expect(postUrl.searchParams.get('sutsumu_key')).toBe('shared-edge-key');
   expect(postBodies[0].schema).toBe('sutsumu-cloud-sync-manual-push');
   expect(postBodies[0].expectedHeadRevisionId).toBe('');
   expect(postBodies[0].bundle.schema).toBe('sutsumu-cloud-sync-shadow-bundle');
@@ -1279,6 +1282,8 @@ test('recovers documents from the survival mirror if IndexedDB is lost', async (
   await expect(page.locator('#list li').filter({ hasText: title }).first()).toBeVisible();
 
   await page.goto('/recovery.html');
-  await expect(page.locator('#survivalSummary')).toContainText('Còpia trobada');
-  await expect(page.locator('#downloadSurvivalBtn')).toBeEnabled();
+  await expect(page.locator('#loadingCard')).toBeHidden({ timeout: 15000 });
+  const survivalRow = page.locator('#sourcesList .source-row').filter({ hasText: 'supervivència' });
+  await expect(survivalRow).toBeVisible();
+  await expect(survivalRow.locator('button[data-idx]')).toBeEnabled();
 });

@@ -1,0 +1,47 @@
+
+> sutsumu-regression@1.1.0 test:regression
+> playwright test
+
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:13] "GET /index.html HTTP/1.1" 200 -
+
+Running 28 tests using 1 worker
+
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:14] "GET /index.html HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:14] "GET /style.css HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:14] "GET /vendor/localforage-1.10.0.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:14] "GET /vendor/epub.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:14] "GET /vendor/jszip-3.1.5.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:14] "GET /app.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:14] "GET /icons/icon-192.png HTTP/1.1" 200 -
+  ✓   1 tests/regression/critical-flows.spec.js:21:1 › creates, edits and reopens a document without losing content (1.2s)
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:16] "GET /index.html HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:16] "GET /vendor/localforage-1.10.0.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:16] "GET /vendor/jszip-3.1.5.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:16] "GET /style.css HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:16] "GET /vendor/epub.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:16] "GET /app.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:16] "GET /icons/icon-192.png HTTP/1.1" 200 -
+  ✓   2 tests/regression/critical-flows.spec.js:42:1 › supports tags, quick filters and command palette navigation (1.8s)
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:17] "GET /index.html HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:17] "GET /vendor/localforage-1.10.0.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:17] "GET /vendor/jszip-3.1.5.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:17] "GET /style.css HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:17] "GET /vendor/epub.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:17] "GET /app.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:17] "GET /icons/icon-192.png HTTP/1.1" 200 -
+  ✓   3 tests/regression/critical-flows.spec.js:79:1 › exports a sync payload base without mixing in local-only state (1.4s)
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:19] "GET /index.html HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:19] "GET /style.css HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:19] "GET /vendor/localforage-1.10.0.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:19] "GET /vendor/jszip-3.1.5.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:19] "GET /vendor/epub.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:19] "GET /app.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:19] "GET /icons/icon-192.png HTTP/1.1" 200 -
+  ✓   4 tests/regression/critical-flows.spec.js:112:1 › builds local shadow revisions and exports an immutable shadow bundle (3.2s)
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:22] "GET /index.html HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:22] "GET /vendor/jszip-3.1.5.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:22] "GET /style.css HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:22] "GET /vendor/localforage-1.10.0.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:22] "GET /app.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:22] "GET /vendor/epub.min.js HTTP/1.1" 200 -
+[2m[WebServer] [22m127.0.0.1 - - [15/Apr/2026 08:09:22] "GET /icons/icon-192.png HTTP/1.1" 200 -

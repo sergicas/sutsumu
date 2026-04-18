@@ -2136,7 +2136,7 @@ function buildSupabaseHeadUrl(profile = getDraftRemoteProviderProfile()) {
   return baseUrl.toString();
 }
 
-function buildSupabaseFunctionHeadUrl(profile = getDraftRemoteProviderProfile()) {
+function buildSupabaseFunctionHeadUrl(profile = getDraftRemoteProviderProfile(), secret = remoteProviderSecret) {
   const normalized = normalizeRemoteProviderProfile(profile);
   if (!canBuildSupabaseFunctionHeadUrl(normalized)) {
     throw new Error('Per construir la URL de la Edge Function cal la URL base, el nom de funcio i el local workspace id.');
@@ -2152,7 +2152,7 @@ function buildSupabaseFunctionHeadUrl(profile = getDraftRemoteProviderProfile())
   if (normalized.preset === 'supabase-function' && normalized.publicKey) {
     baseUrl.searchParams.set('apikey', normalized.publicKey);
   }
-  const trimmedSecret = typeof remoteProviderSecret === 'string' ? remoteProviderSecret.trim() : '';
+  const trimmedSecret = typeof secret === 'string' ? secret.trim() : '';
   if (normalized.preset === 'supabase-function' && trimmedSecret) {
     baseUrl.searchParams.set('sutsumu_key', trimmedSecret);
   }
@@ -2449,7 +2449,7 @@ async function fetchRemoteShadowBundleFromProviderHead(url, providerProfile = re
       bundle: remoteShadowSource
     };
   }
-  const bundle = await fetchRemoteShadowBundleFromUrl(parsedHead.bundleUrl);
+  const bundle = await fetchRemoteShadowBundleFromUrl(parsedHead.bundleUrl, authHeaders);
   return {
     descriptor: parsedHead,
     bundle
@@ -2466,7 +2466,7 @@ async function connectRemoteShadowUrl(options = {}) {
   if (mode === 'provider-head-url' && !rawUrl && draftProviderProfile?.preset === 'supabase' && canBuildSupabaseHeadUrl(draftProviderProfile)) {
     effectiveUrl = buildSupabaseHeadUrl(draftProviderProfile);
   } else if (mode === 'provider-head-url' && !rawUrl && draftProviderProfile?.preset === 'supabase-function' && canBuildSupabaseFunctionHeadUrl(draftProviderProfile)) {
-    effectiveUrl = buildSupabaseFunctionHeadUrl(draftProviderProfile);
+    effectiveUrl = buildSupabaseFunctionHeadUrl(draftProviderProfile, draftProviderSecret);
   }
   if (!effectiveUrl) {
     showToast(mode === 'provider-head-url' ? 'Introdueix una URL de head remot.' : 'Introdueix una URL de bundle remot.', 'error');
@@ -11778,7 +11778,7 @@ async function applyPendingAppUpdate() {
           } else if (ft.startsWith('audio/')) {
             mediaPreviewGroup.innerHTML = `<audio controls src="${currentObjectUrl}"></audio>`;
           } else if (ft === 'application/pdf') {
-            mediaPreviewGroup.innerHTML = `<embed src="${currentObjectUrl}#toolbar=0" type="application/pdf" width="100%" height="600" />`;
+            mediaPreviewGroup.innerHTML = `<iframe src="${currentObjectUrl}" width="100%" style="height: 70vh; min-height: 500px; border: none;" title="Visualitzador PDF"></iframe>`;
           } else if (ft === 'application/epub+zip' || (doc.fileName && doc.fileName.toLowerCase().endsWith('.epub'))) {
             mediaPreviewGroup.innerHTML = `
               <div id="epubViewer" style="width: 100%; height: 60vh; min-height: 400px; display: flex; flex-direction: column;">

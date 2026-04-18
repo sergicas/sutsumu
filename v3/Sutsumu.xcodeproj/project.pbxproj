@@ -1,0 +1,633 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0D37248287093D28261CDE4C /* SutsumuStorageClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F9FCF9688EBFA5913A9CE0D /* SutsumuStorageClient.swift */; };
+		1CC12747D7A5FD4FC228B977 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E393AD331829AB2791D82A /* ProfileView.swift */; };
+		1DCE3105BDF29114BEDC3760 /* ThemePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F981F1783CF3AC273485403E /* ThemePickerView.swift */; };
+		2AEF1EDF52554DF3FE05B4C0 /* ErrorEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293121F98BA999E84C64AC8E /* ErrorEntry.swift */; };
+		2B37321949E6535826F3D34E /* SutsumuSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E74CD4AF93DD847AA4C187C4 /* SutsumuSyncClient.swift */; };
+		309280549675C1D4D8B7787C /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09E7612527319665E9291D0F /* KeychainStore.swift */; };
+		33FBF59C0762BDBE52BB8AB4 /* SutsumuAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = D87D0DE8A9422502FE00879C /* SutsumuAttachment.swift */; };
+		4883B79F599DB767982E317E /* AttachmentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5DDB5A5057BA701E7A44355 /* AttachmentService.swift */; };
+		58A752BECD2367406C86DF45 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D5098E55798C7A8FA9BC67 /* AppStateTests.swift */; };
+		66DE592B55F6218DC677C33B /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F86288698EC1E0A6774170C /* AppState.swift */; };
+		6A15E7AA9908D72620916455 /* ThemeEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DC19F0EEB448C47E5DC0BE4 /* ThemeEngine.swift */; };
+		6F98188B196F68F73CF6E7BA /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED129FF2EB7F513F66E6A7E6 /* AuthService.swift */; };
+		795C262A28B3B0A8B6B65C32 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE9D881A21CB3BF7FF9479B7 /* HomeView.swift */; };
+		7FF1CF132283A1FC752EC1FA /* HealthCheckTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 690F4AD2101C83108BD23395 /* HealthCheckTests.swift */; };
+		85758E982092A36E218E8DDC /* HealthCheckService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B72FC832490362CA55640A5D /* HealthCheckService.swift */; };
+		87F10EBA9D9B8E976B5C827B /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56516CE604D00EF469710D51 /* AuthView.swift */; };
+		905316CEC9EF51A1DBC58F1E /* WorkspaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2D6E81C57C72F7954D1CB35 /* WorkspaceModels.swift */; };
+		98B48FCFE88FBD440405DE95 /* SutsumuAuthClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5EBF610AC5C413AFBF76B0 /* SutsumuAuthClient.swift */; };
+		9D8777A1B2E1D4B6142DC7CD /* DocumentEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB28F9425E3C5E8A20D0F594 /* DocumentEditorView.swift */; };
+		A00B0E05D5D07F17ABCD8646 /* WorkspaceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A6AFA7B98E78D704224638E /* WorkspaceServiceTests.swift */; };
+		A07B97C769A08066DA209982 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8172C6AB1BDD8057A6B6E654 /* DiagnosticsView.swift */; };
+		B5DB88E694267C526DF1B0A8 /* WorkspaceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65E6EBA9BE158B4F96CF9341 /* WorkspaceService.swift */; };
+		BDA01C6FC78BE2BD77C24225 /* AttachmentSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F74A8E690C082E0192922AB /* AttachmentSection.swift */; };
+		BFCDB3640C3270B80585C4DF /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E479833F100AA7D19ABFA21 /* ContentView.swift */; };
+		CA7F1AFAF504E92B658E50B5 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D599A35F5E1E54AC778D41 /* LibraryView.swift */; };
+		CFD424070F3840AD16460936 /* SyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16874C0F9C5EC5DA38BB1F8D /* SyncService.swift */; };
+		D88EE32E67BE62CFBFCC6329 /* DiagnosticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6453F47969AFA1E9BF7C4B8 /* DiagnosticsService.swift */; };
+		F10B397E9FC273EEA6C64E1C /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = C662124C01846F0545A1D004 /* Components.swift */; };
+		F1E10216E5311C466118FE17 /* DiagnosticsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3500C5868962DCB22D8638 /* DiagnosticsServiceTests.swift */; };
+		F41EB4BC566762D91F82F1FA /* SutsumuApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C89023A1BF59CFD490D8B6 /* SutsumuApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		6E0926FE53B57B9B943FB22F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B910888C59E82D383C978691 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B94CED57657CEFDF9CE6D34F;
+			remoteInfo = Sutsumu;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		09E7612527319665E9291D0F /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		0A6AFA7B98E78D704224638E /* WorkspaceServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceServiceTests.swift; sourceTree = "<group>"; };
+		0E479833F100AA7D19ABFA21 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		0F86288698EC1E0A6774170C /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		16874C0F9C5EC5DA38BB1F8D /* SyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncService.swift; sourceTree = "<group>"; };
+		1D3292EC7D0AE7379A57EE85 /* SutsumuTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SutsumuTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1DC19F0EEB448C47E5DC0BE4 /* ThemeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeEngine.swift; sourceTree = "<group>"; };
+		1E5EBF610AC5C413AFBF76B0 /* SutsumuAuthClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SutsumuAuthClient.swift; sourceTree = "<group>"; };
+		293121F98BA999E84C64AC8E /* ErrorEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorEntry.swift; sourceTree = "<group>"; };
+		56516CE604D00EF469710D51 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
+		5F74A8E690C082E0192922AB /* AttachmentSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentSection.swift; sourceTree = "<group>"; };
+		65E6EBA9BE158B4F96CF9341 /* WorkspaceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceService.swift; sourceTree = "<group>"; };
+		690F4AD2101C83108BD23395 /* HealthCheckTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCheckTests.swift; sourceTree = "<group>"; };
+		6F9FCF9688EBFA5913A9CE0D /* SutsumuStorageClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SutsumuStorageClient.swift; sourceTree = "<group>"; };
+		7B3500C5868962DCB22D8638 /* DiagnosticsServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsServiceTests.swift; sourceTree = "<group>"; };
+		8172C6AB1BDD8057A6B6E654 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
+		9A6860F24ED6F8E6D7950AA0 /* Sutsumu.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Sutsumu.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2D5098E55798C7A8FA9BC67 /* AppStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
+		A2D6E81C57C72F7954D1CB35 /* WorkspaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceModels.swift; sourceTree = "<group>"; };
+		A5E393AD331829AB2791D82A /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		B6453F47969AFA1E9BF7C4B8 /* DiagnosticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsService.swift; sourceTree = "<group>"; };
+		B72FC832490362CA55640A5D /* HealthCheckService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCheckService.swift; sourceTree = "<group>"; };
+		BB28F9425E3C5E8A20D0F594 /* DocumentEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentEditorView.swift; sourceTree = "<group>"; };
+		C5DDB5A5057BA701E7A44355 /* AttachmentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentService.swift; sourceTree = "<group>"; };
+		C662124C01846F0545A1D004 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		D7C89023A1BF59CFD490D8B6 /* SutsumuApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SutsumuApp.swift; sourceTree = "<group>"; };
+		D87D0DE8A9422502FE00879C /* SutsumuAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SutsumuAttachment.swift; sourceTree = "<group>"; };
+		E74CD4AF93DD847AA4C187C4 /* SutsumuSyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SutsumuSyncClient.swift; sourceTree = "<group>"; };
+		ED129FF2EB7F513F66E6A7E6 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		F5D599A35F5E1E54AC778D41 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		F981F1783CF3AC273485403E /* ThemePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemePickerView.swift; sourceTree = "<group>"; };
+		FE9D881A21CB3BF7FF9479B7 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		13D66A1A02EFC3490443AA53 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				ED129FF2EB7F513F66E6A7E6 /* AuthService.swift */,
+				09E7612527319665E9291D0F /* KeychainStore.swift */,
+				1E5EBF610AC5C413AFBF76B0 /* SutsumuAuthClient.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		182A02AA99E46F7AAA203BE3 /* Workspace */ = {
+			isa = PBXGroup;
+			children = (
+				A2D6E81C57C72F7954D1CB35 /* WorkspaceModels.swift */,
+				65E6EBA9BE158B4F96CF9341 /* WorkspaceService.swift */,
+			);
+			path = Workspace;
+			sourceTree = "<group>";
+		};
+		2E81DA54CA81283C48441243 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				A2D5098E55798C7A8FA9BC67 /* AppStateTests.swift */,
+				7B3500C5868962DCB22D8638 /* DiagnosticsServiceTests.swift */,
+				690F4AD2101C83108BD23395 /* HealthCheckTests.swift */,
+				0A6AFA7B98E78D704224638E /* WorkspaceServiceTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		3CCF75A84290007C0C18CAAD /* Diagnostics */ = {
+			isa = PBXGroup;
+			children = (
+				B6453F47969AFA1E9BF7C4B8 /* DiagnosticsService.swift */,
+				293121F98BA999E84C64AC8E /* ErrorEntry.swift */,
+				B72FC832490362CA55640A5D /* HealthCheckService.swift */,
+			);
+			path = Diagnostics;
+			sourceTree = "<group>";
+		};
+		4D1843160677F2401A6CBF2B /* Library */ = {
+			isa = PBXGroup;
+			children = (
+				F5D599A35F5E1E54AC778D41 /* LibraryView.swift */,
+			);
+			path = Library;
+			sourceTree = "<group>";
+		};
+		66299A308977E926E5EFD894 /* Editor */ = {
+			isa = PBXGroup;
+			children = (
+				5F74A8E690C082E0192922AB /* AttachmentSection.swift */,
+				BB28F9425E3C5E8A20D0F594 /* DocumentEditorView.swift */,
+			);
+			path = Editor;
+			sourceTree = "<group>";
+		};
+		6E051F2D0BD5EFFCBCE5E5E5 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				7B9D605280F7ADFE9E8509F2 /* Attachments */,
+				13D66A1A02EFC3490443AA53 /* Auth */,
+				3CCF75A84290007C0C18CAAD /* Diagnostics */,
+				E7BC637139E5193BA08B7901 /* Sync */,
+				E55753E067483F7ACE8FDABA /* Theme */,
+				182A02AA99E46F7AAA203BE3 /* Workspace */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		7B9D605280F7ADFE9E8509F2 /* Attachments */ = {
+			isa = PBXGroup;
+			children = (
+				C5DDB5A5057BA701E7A44355 /* AttachmentService.swift */,
+				D87D0DE8A9422502FE00879C /* SutsumuAttachment.swift */,
+				6F9FCF9688EBFA5913A9CE0D /* SutsumuStorageClient.swift */,
+			);
+			path = Attachments;
+			sourceTree = "<group>";
+		};
+		7F0D3F99B103C43718E400D4 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				56516CE604D00EF469710D51 /* AuthView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		B4F8E55948CAFBFEF0D9D3C7 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				9A6860F24ED6F8E6D7950AA0 /* Sutsumu.app */,
+				1D3292EC7D0AE7379A57EE85 /* SutsumuTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B95C21A53B5B9CD0C4B124CF = {
+			isa = PBXGroup;
+			children = (
+				E02E3D900395CA149167F2FF /* Sources */,
+				2E81DA54CA81283C48441243 /* Tests */,
+				B4F8E55948CAFBFEF0D9D3C7 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C1A60069B0DDD480457C9D37 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				C662124C01846F0545A1D004 /* Components.swift */,
+				FE9D881A21CB3BF7FF9479B7 /* HomeView.swift */,
+				7F0D3F99B103C43718E400D4 /* Auth */,
+				66299A308977E926E5EFD894 /* Editor */,
+				4D1843160677F2401A6CBF2B /* Library */,
+				FA12EEF32709EEEF4ABBC602 /* Settings */,
+				D301099F4853ACF3F4942238 /* Themes */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		D301099F4853ACF3F4942238 /* Themes */ = {
+			isa = PBXGroup;
+			children = (
+				F981F1783CF3AC273485403E /* ThemePickerView.swift */,
+			);
+			path = Themes;
+			sourceTree = "<group>";
+		};
+		E02E3D900395CA149167F2FF /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				E29CC15EFF996CA24D89F128 /* App */,
+				6E051F2D0BD5EFFCBCE5E5E5 /* Core */,
+				C1A60069B0DDD480457C9D37 /* Views */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		E29CC15EFF996CA24D89F128 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				0F86288698EC1E0A6774170C /* AppState.swift */,
+				0E479833F100AA7D19ABFA21 /* ContentView.swift */,
+				D7C89023A1BF59CFD490D8B6 /* SutsumuApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		E55753E067483F7ACE8FDABA /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				1DC19F0EEB448C47E5DC0BE4 /* ThemeEngine.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		E7BC637139E5193BA08B7901 /* Sync */ = {
+			isa = PBXGroup;
+			children = (
+				E74CD4AF93DD847AA4C187C4 /* SutsumuSyncClient.swift */,
+				16874C0F9C5EC5DA38BB1F8D /* SyncService.swift */,
+			);
+			path = Sync;
+			sourceTree = "<group>";
+		};
+		FA12EEF32709EEEF4ABBC602 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				8172C6AB1BDD8057A6B6E654 /* DiagnosticsView.swift */,
+				A5E393AD331829AB2791D82A /* ProfileView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5A84546092B704DA384902D3 /* SutsumuTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 049A201404106B9B6D736B0A /* Build configuration list for PBXNativeTarget "SutsumuTests" */;
+			buildPhases = (
+				CCE08EFA424AD0E3373557E4 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BA0514093C118BE52ADA709B /* PBXTargetDependency */,
+			);
+			name = SutsumuTests;
+			packageProductDependencies = (
+			);
+			productName = SutsumuTests;
+			productReference = 1D3292EC7D0AE7379A57EE85 /* SutsumuTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		B94CED57657CEFDF9CE6D34F /* Sutsumu */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6A26E4F3236D856BBEC20692 /* Build configuration list for PBXNativeTarget "Sutsumu" */;
+			buildPhases = (
+				EB7E93607CF08F842ADEF57F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Sutsumu;
+			packageProductDependencies = (
+			);
+			productName = Sutsumu;
+			productReference = 9A6860F24ED6F8E6D7950AA0 /* Sutsumu.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B910888C59E82D383C978691 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1540;
+				TargetAttributes = {
+					5A84546092B704DA384902D3 = {
+						DevelopmentTeam = Q479WYX9TL;
+						ProvisioningStyle = Automatic;
+					};
+					B94CED57657CEFDF9CE6D34F = {
+						DevelopmentTeam = Q479WYX9TL;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = D694667661B5E0E9DD28FB0E /* Build configuration list for PBXProject "Sutsumu" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B95C21A53B5B9CD0C4B124CF;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B4F8E55948CAFBFEF0D9D3C7 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B94CED57657CEFDF9CE6D34F /* Sutsumu */,
+				5A84546092B704DA384902D3 /* SutsumuTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CCE08EFA424AD0E3373557E4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				58A752BECD2367406C86DF45 /* AppStateTests.swift in Sources */,
+				F1E10216E5311C466118FE17 /* DiagnosticsServiceTests.swift in Sources */,
+				7FF1CF132283A1FC752EC1FA /* HealthCheckTests.swift in Sources */,
+				A00B0E05D5D07F17ABCD8646 /* WorkspaceServiceTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EB7E93607CF08F842ADEF57F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				66DE592B55F6218DC677C33B /* AppState.swift in Sources */,
+				BDA01C6FC78BE2BD77C24225 /* AttachmentSection.swift in Sources */,
+				4883B79F599DB767982E317E /* AttachmentService.swift in Sources */,
+				6F98188B196F68F73CF6E7BA /* AuthService.swift in Sources */,
+				87F10EBA9D9B8E976B5C827B /* AuthView.swift in Sources */,
+				F10B397E9FC273EEA6C64E1C /* Components.swift in Sources */,
+				BFCDB3640C3270B80585C4DF /* ContentView.swift in Sources */,
+				D88EE32E67BE62CFBFCC6329 /* DiagnosticsService.swift in Sources */,
+				A07B97C769A08066DA209982 /* DiagnosticsView.swift in Sources */,
+				9D8777A1B2E1D4B6142DC7CD /* DocumentEditorView.swift in Sources */,
+				2AEF1EDF52554DF3FE05B4C0 /* ErrorEntry.swift in Sources */,
+				85758E982092A36E218E8DDC /* HealthCheckService.swift in Sources */,
+				795C262A28B3B0A8B6B65C32 /* HomeView.swift in Sources */,
+				309280549675C1D4D8B7787C /* KeychainStore.swift in Sources */,
+				CA7F1AFAF504E92B658E50B5 /* LibraryView.swift in Sources */,
+				1CC12747D7A5FD4FC228B977 /* ProfileView.swift in Sources */,
+				F41EB4BC566762D91F82F1FA /* SutsumuApp.swift in Sources */,
+				33FBF59C0762BDBE52BB8AB4 /* SutsumuAttachment.swift in Sources */,
+				98B48FCFE88FBD440405DE95 /* SutsumuAuthClient.swift in Sources */,
+				0D37248287093D28261CDE4C /* SutsumuStorageClient.swift in Sources */,
+				2B37321949E6535826F3D34E /* SutsumuSyncClient.swift in Sources */,
+				CFD424070F3840AD16460936 /* SyncService.swift in Sources */,
+				6A15E7AA9908D72620916455 /* ThemeEngine.swift in Sources */,
+				1DCE3105BDF29114BEDC3760 /* ThemePickerView.swift in Sources */,
+				905316CEC9EF51A1DBC58F1E /* WorkspaceModels.swift in Sources */,
+				B5DB88E694267C526DF1B0A8 /* WorkspaceService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BA0514093C118BE52ADA709B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B94CED57657CEFDF9CE6D34F /* Sutsumu */;
+			targetProxy = 6E0926FE53B57B9B943FB22F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2014C2443EBBE38DA7260BCC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Resources/Sutsumu.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cat.sergicastillo.sutsumu.v3;
+				PRODUCT_NAME = Sutsumu;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3F7CEC1E5FA6E2F4810175AB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = Q479WYX9TL;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.10;
+			};
+			name = Debug;
+		};
+		6E42BD3AEA885CA0A2F27D78 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = Q479WYX9TL;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.10;
+			};
+			name = Release;
+		};
+		787EAC601732FA46BC27E89E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cat.sergicastillo.sutsumu.v3.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Sutsumu.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Sutsumu";
+			};
+			name = Debug;
+		};
+		C65736AEE9771F0343C92A3C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cat.sergicastillo.sutsumu.v3.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Sutsumu.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Sutsumu";
+			};
+			name = Release;
+		};
+		DF6FE7EE45BE157DA44738B7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Resources/Sutsumu.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cat.sergicastillo.sutsumu.v3;
+				PRODUCT_NAME = Sutsumu;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		049A201404106B9B6D736B0A /* Build configuration list for PBXNativeTarget "SutsumuTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				787EAC601732FA46BC27E89E /* Debug */,
+				C65736AEE9771F0343C92A3C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6A26E4F3236D856BBEC20692 /* Build configuration list for PBXNativeTarget "Sutsumu" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2014C2443EBBE38DA7260BCC /* Debug */,
+				DF6FE7EE45BE157DA44738B7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D694667661B5E0E9DD28FB0E /* Build configuration list for PBXProject "Sutsumu" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3F7CEC1E5FA6E2F4810175AB /* Debug */,
+				6E42BD3AEA885CA0A2F27D78 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = B910888C59E82D383C978691 /* Project object */;
+}

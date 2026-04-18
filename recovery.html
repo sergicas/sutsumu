@@ -3,174 +3,352 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sutsumu Recovery</title>
+  <title>Sutsumu — Rescat de dades</title>
   <style>
     :root { color-scheme: light; }
+    *, *::before, *::after { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: linear-gradient(180deg, #eff6ff, #f8fafc); color: #0f172a; }
-    .wrap { max-width: 860px; margin: 0 auto; padding: 40px 20px 56px; }
-    .card { background: #fff; border: 1px solid #dbeafe; border-radius: 20px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08); padding: 24px; margin-bottom: 18px; }
-    h1 { margin: 0 0 10px; font-size: 32px; }
-    h2 { margin-top: 0; }
-    p { line-height: 1.6; }
-    .muted { color: #64748b; }
-    .badge { display: inline-flex; padding: 6px 10px; border-radius: 999px; background: #e0f2fe; color: #0369a1; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
-    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
-    button, a.btn { appearance: none; border: 0; border-radius: 12px; padding: 12px 16px; background: #0ea5e9; color: white; font-weight: 700; cursor: pointer; text-decoration: none; }
-    button.secondary, a.secondary { background: #e2e8f0; color: #0f172a; }
-    button:disabled { opacity: 0.55; cursor: not-allowed; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
-    .stat { padding: 14px; border-radius: 14px; background: #f8fafc; border: 1px solid #e2e8f0; }
-    .stat strong { display: block; font-size: 22px; margin-top: 4px; }
-    .warn { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
-    code { background: #eff6ff; padding: 2px 6px; border-radius: 6px; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 40px 20px 64px; }
+    .card { background: #fff; border: 1px solid #dbeafe; border-radius: 20px; box-shadow: 0 4px 24px rgba(15,23,42,0.07); padding: 24px; margin-bottom: 18px; }
+    h1 { margin: 0 0 10px; font-size: 28px; font-weight: 800; }
+    h2 { margin: 0 0 10px; font-size: 17px; font-weight: 700; }
+    p { line-height: 1.6; margin: 0 0 10px; }
+    .muted { color: #64748b; font-size: 14px; }
+    .badge { display: inline-flex; padding: 5px 10px; border-radius: 999px; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .badge-blue { background: #e0f2fe; color: #0369a1; }
+    .badge-red  { background: #fee2e2; color: #b91c1c; }
+    .badge-green{ background: #dcfce7; color: #15803d; }
+    .badge-gray { background: #f1f5f9; color: #475569; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    button, a.btn { appearance: none; border: 0; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+    button:hover, a.btn:hover { opacity: .85; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: #0ea5e9; color: #fff; }
+    .btn-secondary { background: #e2e8f0; color: #0f172a; }
+    .btn-warn { background: #ef4444; color: #fff; }
+    .stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+    .chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px; background: #f1f5f9; font-size: 12px; font-weight: 600; color: #475569; }
+    .chip svg { width: 12px; height: 12px; flex-shrink: 0; }
+    .source-row { border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px; margin-bottom: 10px; }
+    .source-row.best { border-color: #bfdbfe; background: #f0f9ff; }
+    .source-label { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+    .source-title { font-size: 15px; font-weight: 700; color: #0f172a; }
+    .source-date { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .warn-card { background: #fff7ed; border-color: #fed7aa; }
+    .warn-card h2, .warn-card p { color: #9a3412; }
+    code { background: #eff6ff; padding: 2px 6px; border-radius: 6px; font-size: 13px; }
+    ol { padding-left: 20px; line-height: 1.9; }
+    hr { border: 0; border-top: 1px solid #e2e8f0; margin: 14px 0; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #94a3b8; border-top-color: #0ea5e9; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #sourcesSection { display: none; }
+    .empty-msg { color: #64748b; font-style: italic; font-size: 14px; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <span class="badge">Recuperació</span>
-      <h1>Recuperació de Sutsumu</h1>
-      <p>Aquesta pantalla llegeix la <strong>còpia local de supervivència</strong> guardada al navegador. Serveix per recuperar carpetes i documents recents si l'app principal queda buida o falla en arrencar. Quan hi caben, també hi reincorpora adjunts lleugers.</p>
-      <p class="muted">Obre aquesta pàgina des del mateix navegador i perfil on havies fet servir Sutsumu.</p>
-      <div class="actions">
-        <a class="btn secondary" href="index.html">Tornar a Sutsumu</a>
-      </div>
-    </div>
+<div class="wrap">
 
-    <div class="card" id="survivalCard">
-      <h2>Supervivència local</h2>
-      <p id="survivalSummary" class="muted">Comprovant si hi ha dades recuperables...</p>
-      <div id="survivalStats" class="stats"></div>
-      <div class="actions">
-        <button id="downloadSurvivalBtn" disabled>Descarregar còpia de supervivència</button>
-      </div>
-    </div>
-
-    <div class="card" id="vaultCard">
-      <h2>Volta crítica</h2>
-      <p id="vaultSummary" class="muted">Comprovant si hi ha una còpia crítica completa...</p>
-      <div id="vaultStats" class="stats"></div>
-      <div class="actions">
-        <button id="downloadVaultBtn" disabled>Descarregar còpia crítica</button>
-      </div>
-    </div>
-
-    <div class="card warn">
-      <h2>Com recuperar-ho</h2>
-      <p>1. Descarrega la còpia que trobis aquí.</p>
-      <p>2. Torna a obrir Sutsumu quan funcioni.</p>
-      <p>3. Fes servir <code>Importar JSON</code> i selecciona l'arxiu descarregat.</p>
+  <!-- Header -->
+  <div class="card">
+    <span class="badge badge-red">Rescat d'emergència</span>
+    <h1>Rescat de dades de Sutsumu</h1>
+    <p>Aquesta pàgina llegeix <strong>totes les còpies locals</strong> disponibles al navegador: l'emmagatzematge principal (IndexedDB), les còpies de seguretat automàtiques i els miralls de supervivència.</p>
+    <p class="muted">Per obtenir millors resultats, obre-la des del <strong>mateix navegador i perfil</strong> on usaves Sutsumu.</p>
+    <div class="actions">
+      <a class="btn btn-secondary" href="index.html">Tornar a Sutsumu</a>
     </div>
   </div>
-  <script>
-    const SURVIVAL_LIGHT_BACKUP_HISTORY_KEY = 'sutsumu_survival_light_backup_history_v1';
-    const SURVIVAL_RECOVERY_VAULT_KEY = 'sutsumu_survival_recovery_vault_v1';
-    const SURVIVAL_ATTACHMENT_MIRROR_KEY = 'sutsumu_survival_attachment_mirror_v1';
-    const survivalSummary = document.getElementById('survivalSummary');
-    const survivalStats = document.getElementById('survivalStats');
-    const vaultSummary = document.getElementById('vaultSummary');
-    const vaultStats = document.getElementById('vaultStats');
-    const downloadSurvivalBtn = document.getElementById('downloadSurvivalBtn');
-    const downloadVaultBtn = document.getElementById('downloadVaultBtn');
 
-    function safeParse(value, fallback) { try { return JSON.parse(value); } catch (_err) { return fallback; } }
-    function countStats(payload) {
-      const docs = Array.isArray(payload?.docs) ? payload.docs : [];
+  <!-- Loading state -->
+  <div id="loadingCard" class="card">
+    <p><span class="spinner"></span> &nbsp;Llegint emmagatzematge local...</p>
+  </div>
+
+  <!-- Sources found -->
+  <div id="sourcesSection">
+    <div class="card">
+      <h2>Fonts de recuperació disponibles</h2>
+      <p class="muted">Les fonts estan ordenades per completesa i data. Descarrega la millor i reimporta-la a Sutsumu.</p>
+      <div id="sourcesList"></div>
+    </div>
+  </div>
+
+  <!-- No data found -->
+  <div id="noDataCard" class="card" style="display:none">
+    <span class="badge badge-gray">Sense dades</span>
+    <h2>No s'ha trobat cap còpia recuperable</h2>
+    <p class="muted">Aquest navegador no té cap còpia local de Sutsumu. Si feies servir un altre navegador o dispositiu, obre aquesta pàgina des d'allà.</p>
+  </div>
+
+  <!-- How to restore -->
+  <div class="card warn-card">
+    <h2>Com recuperar les dades</h2>
+    <ol>
+      <li>Descarrega la font més completa de la llista de dalt.</li>
+      <li>Torna a obrir <a href="index.html">Sutsumu</a>.</li>
+      <li>Ves a <strong>Configuració → Còpia de seguretat → Restaurar des d'arxiu</strong>.</li>
+      <li>Selecciona l'arxiu descarregat (<code>.json</code>).</li>
+      <li>Sutsumu reimportarà tots els documents i carpetes.</li>
+    </ol>
+    <hr>
+    <p class="muted">Si l'app principal no arrenca, pots obrir aquesta pàgina directament a <code>/recovery.html</code> per descarregar les dades i restaurar-les en una altra instal·lació.</p>
+  </div>
+
+</div>
+
+<script src="vendor/localforage-1.10.0.min.js"></script>
+<script>
+  'use strict';
+
+  // ─── Storage Keys ───────────────────────────────────────────────────────────
+  const KEYS = {
+    mainDocs:       'bento_simple_docs',
+    expandedFolders:'bento_expanded_folders',
+    lightBackups:   'bento_light_backup_history_v2',
+    fullBackups:    'bento_full_backup_history_v1',
+    recoveryVault:  'bento_recovery_vault_v1',
+    survivalLight:  'sutsumu_survival_light_backup_history_v1',
+    survivalVault:  'sutsumu_survival_recovery_vault_v1',
+    attachmentMirror:'sutsumu_survival_attachment_mirror_v1'
+  };
+
+  // ─── localforage instances ───────────────────────────────────────────────────
+  const mainStore   = localforage.createInstance({ name: 'BentoApp', storeName: 'documents' });
+  const backupStore = localforage.createInstance({ name: 'BentoApp', storeName: 'backups'   });
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
+  function safeParse(raw, fallback = null) {
+    if (raw === null || raw === undefined) return fallback;
+    if (typeof raw === 'object') return raw; // already parsed (IndexedDB returns objects)
+    try { return JSON.parse(raw); } catch (_) { return fallback; }
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return 'Data desconeguda';
+    try { return new Date(iso).toLocaleString('ca-ES', { dateStyle:'medium', timeStyle:'short' }); }
+    catch (_) { return iso; }
+  }
+
+  function countStats(docs) {
+    if (!Array.isArray(docs)) return { documents: 0, folders: 0, deleted: 0, versions: 0 };
+    return {
+      documents: docs.filter(d => d && d.type === 'document' && !d.isDeleted).length,
+      folders:   docs.filter(d => d && d.type === 'folder'   && !d.isDeleted).length,
+      deleted:   docs.filter(d => d && d.isDeleted).length,
+      versions:  docs.reduce((n, d) => n + (Array.isArray(d?.versions) ? d.versions.length : 0), 0)
+    };
+  }
+
+  function statsChips(stats) {
+    const icon = (path) => `<svg viewBox="0 0 20 20" fill="currentColor"><path d="${path}"/></svg>`;
+    const docPath  = 'M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z';
+    const folPath  = 'M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z';
+    const delPath  = 'M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9z';
+    const chips = [];
+    if (stats.documents > 0) chips.push(`<span class="chip">${icon(docPath)} ${stats.documents} doc${stats.documents !== 1 ? 's' : ''}</span>`);
+    if (stats.folders   > 0) chips.push(`<span class="chip">${icon(folPath)} ${stats.folders} carpeta${stats.folders !== 1 ? 's' : ''}</span>`);
+    if (stats.deleted   > 0) chips.push(`<span class="chip">${icon(delPath)} ${stats.deleted} eliminats</span>`);
+    if (stats.versions  > 0) chips.push(`<span class="chip">${stats.versions} versions</span>`);
+    return chips.length ? `<div class="stats">${chips.join('')}</div>` : '<div class="stats"><span class="chip">Sense documents</span></div>';
+  }
+
+  function mergeAttachmentMirror(docs, mirror) {
+    const entries = Array.isArray(mirror?.entries) ? mirror.entries : [];
+    if (!entries.length) return docs;
+    const mirrorMap = new Map(entries
+      .filter(e => e?.id && typeof e.dataUrl === 'string' && e.dataUrl.startsWith('data:'))
+      .map(e => [e.id, e]));
+    return docs.map(item => {
+      if (!item || item.type !== 'document') return item;
+      const m = mirrorMap.get(item.id);
+      if (!m) return item;
       return {
-        folders: docs.filter(item => item && item.type === 'folder' && !item.isDeleted).length,
-        documents: docs.filter(item => item && item.type === 'document' && !item.isDeleted).length,
-        deleted: docs.filter(item => item && item.isDeleted).length,
-        versions: docs.reduce((total, item) => total + (Array.isArray(item?.versions) ? item.versions.length : 0), 0)
+        ...item,
+        fileBlobDataUrl: item.fileBlobDataUrl || m.dataUrl,
+        fileType:  item.fileType  || m.fileType  || '',
+        fileName:  item.fileName  || m.fileName  || '',
+        fileSize:  Number(item.fileSize || m.size || 0),
+        binaryFileUnavailable: false
       };
-    }
-    function renderStatGrid(element, stats) {
-      element.innerHTML = '';
-      Object.entries(stats).forEach(([label, value]) => {
-        const card = document.createElement('div');
-        card.className = 'stat';
-        card.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
-        element.appendChild(card);
-      });
-    }
-    function downloadJson(filename, payload) {
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+  }
+
+  function downloadJson(filename, payload) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  function safeFilename(prefix, isoDate) {
+    return `${prefix}_${String(isoDate || new Date().toISOString()).replace(/[:.]/g, '-').slice(0, 19)}.json`;
+  }
+
+  // ─── Source registry ─────────────────────────────────────────────────────────
+  // Each source: { priority, label, badge, date, docs, expandedFolders, payload }
+  const sources = [];
+
+  function registerSource(opts) {
+    if (!opts || !Array.isArray(opts.docs) || opts.docs.length === 0) return;
+    sources.push(opts);
+  }
+
+  // ─── Read all stores ──────────────────────────────────────────────────────────
+  async function readAllSources() {
+    const attachmentMirror = safeParse(localStorage.getItem(KEYS.attachmentMirror));
+
+    // 1. IndexedDB: current workspace (mainStore)
+    try {
+      const rawDocs      = await mainStore.getItem(KEYS.mainDocs);
+      const rawExpanded  = await mainStore.getItem(KEYS.expandedFolders);
+      const docs = Array.isArray(rawDocs) ? rawDocs : safeParse(rawDocs, []);
+      if (Array.isArray(docs) && docs.length > 0) {
+        registerSource({
+          priority: 10,
+          label: 'Dades principals (IndexedDB)',
+          badge: 'badge-blue',
+          date: (() => { const ts = docs.map(d => d?.timestamp).filter(Boolean).sort().reverse()[0]; return ts || null; })(),
+          docs: mergeAttachmentMirror(docs, attachmentMirror),
+          expandedFolders: Array.isArray(rawExpanded) ? rawExpanded : safeParse(rawExpanded, [])
+        });
+      }
+    } catch (_) {}
+
+    // 2. IndexedDB: recovery vault (backupStore)
+    try {
+      const vault = await backupStore.getItem(KEYS.recoveryVault);
+      const parsed = safeParse(vault);
+      if (parsed?.payload && Array.isArray(parsed.payload.docs) && parsed.payload.docs.length > 0) {
+        registerSource({
+          priority: 9,
+          label: 'Volta de recuperació (IndexedDB)',
+          badge: 'badge-green',
+          date: parsed.createdAt || null,
+          docs: mergeAttachmentMirror(parsed.payload.docs, attachmentMirror),
+          expandedFolders: parsed.payload.expandedFolders || []
+        });
+      }
+    } catch (_) {}
+
+    // 3. IndexedDB: light backup history (backupStore)
+    try {
+      const history = await backupStore.getItem(KEYS.lightBackups);
+      const parsed = Array.isArray(history) ? history : safeParse(history, []);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const best = parsed.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+        if (Array.isArray(best?.docs) && best.docs.length > 0) {
+          registerSource({
+            priority: 8,
+            label: 'Còpia lleugera automàtica (IndexedDB)',
+            badge: 'badge-blue',
+            date: best.createdAt,
+            docs: mergeAttachmentMirror(best.docs, attachmentMirror),
+            expandedFolders: best.expandedFolders || []
+          });
+        }
+      }
+    } catch (_) {}
+
+    // 4. localStorage: survival recovery vault
+    try {
+      const vault = safeParse(localStorage.getItem(KEYS.survivalVault));
+      if (vault?.payload && Array.isArray(vault.payload.docs) && vault.payload.docs.length > 0) {
+        registerSource({
+          priority: 7,
+          label: 'Volta de supervivència (localStorage)',
+          badge: 'badge-green',
+          date: vault.createdAt || null,
+          docs: mergeAttachmentMirror(vault.payload.docs, attachmentMirror),
+          expandedFolders: vault.payload.expandedFolders || []
+        });
+      }
+    } catch (_) {}
+
+    // 5. localStorage: survival light backup history
+    try {
+      const history = safeParse(localStorage.getItem(KEYS.survivalLight), []);
+      if (Array.isArray(history) && history.length > 0) {
+        const best = history.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+        if (Array.isArray(best?.docs) && best.docs.length > 0) {
+          registerSource({
+            priority: 6,
+            label: 'Còpia de supervivència (localStorage)',
+            badge: 'badge-gray',
+            date: best.createdAt,
+            docs: mergeAttachmentMirror(best.docs, attachmentMirror),
+            expandedFolders: best.expandedFolders || []
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+  function renderSources() {
+    document.getElementById('loadingCard').style.display = 'none';
+
+    if (sources.length === 0) {
+      document.getElementById('noDataCard').style.display = '';
+      return;
     }
 
-    function normalizeAttachmentMirrorSnapshot(rawSnapshot) {
-      if (!rawSnapshot || typeof rawSnapshot !== 'object') return { entries: [] };
-      return {
-        entries: Array.isArray(rawSnapshot.entries)
-          ? rawSnapshot.entries.filter(entry => entry && typeof entry.id === 'string' && typeof entry.dataUrl === 'string' && entry.dataUrl.startsWith('data:'))
-          : []
-      };
-    }
+    // Sort by priority desc, then by date desc
+    sources.sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      return new Date(b.date || 0) - new Date(a.date || 0);
+    });
 
-    function mergeSurvivalAttachments(rawDocs, mirrorSnapshot) {
-      const mirrorMap = new Map(normalizeAttachmentMirrorSnapshot(mirrorSnapshot).entries.map(entry => [entry.id, entry]));
-      return (Array.isArray(rawDocs) ? rawDocs : []).map(item => {
-        if (!item || item.type !== 'document') return item;
-        const mirrorEntry = mirrorMap.get(item.id);
-        if (!mirrorEntry) return item;
-        return {
-          ...item,
-          fileBlobDataUrl: typeof item.fileBlobDataUrl === 'string' && item.fileBlobDataUrl ? item.fileBlobDataUrl : mirrorEntry.dataUrl,
-          fileType: item.fileType || mirrorEntry.fileType || '',
-          fileName: item.fileName || mirrorEntry.fileName || '',
-          fileSize: Number(item.fileSize || mirrorEntry.size || 0),
-          binaryFileUnavailable: false
-        };
-      });
-    }
+    const container = document.getElementById('sourcesList');
+    sources.forEach((src, idx) => {
+      const stats  = countStats(src.docs);
+      const isBest = idx === 0;
+      const row    = document.createElement('div');
+      row.className = 'source-row' + (isBest ? ' best' : '');
+      row.innerHTML = `
+        <div class="source-label">
+          <span class="badge ${src.badge}">${src.label}</span>
+          ${isBest ? ' <span class="badge badge-green">Recomanada</span>' : ''}
+        </div>
+        <div class="source-title">${stats.documents} document${stats.documents !== 1 ? 's' : ''}, ${stats.folders} carpeta${stats.folders !== 1 ? 's' : ''}</div>
+        <div class="source-date">Data de la còpia: ${fmtDate(src.date)}</div>
+        ${statsChips(stats)}
+        <div class="actions">
+          <button class="btn-primary" data-idx="${idx}">Descarregar arxiu JSON</button>
+        </div>`;
+      container.appendChild(row);
+    });
 
-    const survivalHistory = safeParse(localStorage.getItem(SURVIVAL_LIGHT_BACKUP_HISTORY_KEY), []);
-    const attachmentMirror = safeParse(localStorage.getItem(SURVIVAL_ATTACHMENT_MIRROR_KEY), null);
-    const latestSurvival = Array.isArray(survivalHistory) && survivalHistory.length
-      ? survivalHistory.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
-      : null;
-
-    if (latestSurvival && Array.isArray(latestSurvival.docs) && latestSurvival.docs.length) {
-      const stats = countStats(latestSurvival);
-      survivalSummary.textContent = `Còpia trobada del ${new Date(latestSurvival.createdAt).toLocaleString('ca-ES')} amb ${stats.documents} documents i ${stats.folders} carpetes.`;
-      renderStatGrid(survivalStats, stats);
-      downloadSurvivalBtn.disabled = false;
-      downloadSurvivalBtn.addEventListener('click', () => {
-        downloadJson(`sutsumu_survival_recovery_${String(latestSurvival.createdAt || new Date().toISOString()).replace(/[:.]/g, '-')}.json`, {
+    container.querySelectorAll('button[data-idx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const src = sources[Number(btn.dataset.idx)];
+        const payload = {
           schema: 'bento-backup',
           version: 2,
           exportedAt: new Date().toISOString(),
-          reason: 'survival-recovery-export',
+          reason: 'emergency-recovery-export',
           app: 'Sutsumu',
-          appVersion: '1.0.0',
-          appRelease: 'estable',
-          docs: mergeSurvivalAttachments(latestSurvival.docs, attachmentMirror),
-          expandedFolders: Array.isArray(latestSurvival.expandedFolders) ? latestSurvival.expandedFolders : [],
-          source: 'survival-local-mirror'
-        });
+          appVersion: '1.1.0',
+          source: src.label,
+          docs: src.docs,
+          expandedFolders: src.expandedFolders
+        };
+        downloadJson(safeFilename('sutsumu_rescat', src.date || new Date().toISOString()), payload);
       });
-    } else {
-      survivalSummary.textContent = 'No he trobat cap còpia local de supervivència en aquest navegador.';
-    }
+    });
 
-    const vaultSnapshot = safeParse(localStorage.getItem(SURVIVAL_RECOVERY_VAULT_KEY), null);
-    if (vaultSnapshot && vaultSnapshot.payload && Array.isArray(vaultSnapshot.payload.docs) && vaultSnapshot.payload.docs.length) {
-      const stats = countStats(vaultSnapshot.payload);
-      vaultSummary.textContent = `Còpia crítica trobada del ${new Date(vaultSnapshot.createdAt).toLocaleString('ca-ES')}.`;
-      renderStatGrid(vaultStats, stats);
-      downloadVaultBtn.disabled = false;
-      downloadVaultBtn.addEventListener('click', () => {
-        downloadJson(`sutsumu_recovery_vault_${String(vaultSnapshot.createdAt || new Date().toISOString()).replace(/[:.]/g, '-')}.json`, vaultSnapshot.payload);
-      });
-    } else {
-      vaultSummary.textContent = 'No he trobat cap volta crítica completa en aquest navegador.';
-    }
-  </script>
+    document.getElementById('sourcesSection').style.display = 'block';
+  }
+
+  // ─── Bootstrap ───────────────────────────────────────────────────────────────
+  readAllSources()
+    .then(renderSources)
+    .catch(err => {
+      console.error('Recovery read error:', err);
+      renderSources(); // render whatever was collected before the error
+    });
+</script>
 </body>
 </html>
